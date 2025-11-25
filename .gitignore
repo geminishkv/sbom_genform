@@ -1,0 +1,74 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+*.icloud
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Secrets and environment configs
+.env
+.env.*
+*.env
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+
+# Logs and runtime files
+*.log
+logs/
+*.pid
+
+# Office/data exports (отчёты)
+*.odt
+*.xlsx
+*.xls
+reports/
+output/
+
+# Databases (если вдруг используются)
+*.sqlite
+*.db
+*.sql
+
+# System files (MacOS/Windows)
+.DS_Store
+Thumbs.db
+
+# Jupyter/Notebook
+.ipynb_checkpoints
+
+# Temporary/backup/compressed files
+*.bak
+*.tmp
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+
+# Remove if you do NOT use Node.js!
+node_modules/
+/node_modules
+dist/
+build/
