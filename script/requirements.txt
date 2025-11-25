@@ -1,0 +1,30 @@
+# Для порядковой работы скриптов
+beautifulsoup4==4.13.5 # HTML парсинг
+certifi==2025.8.3 # TLS сертификаты для requests
+charset-normalizer==3.4.3 # Для обработки кодировок (requests и др.)
+click==8.2.1 # Безопасная работа с XML
+odfpy==1.4.1 # Для работы с ODT-файлами
+pandas==2.3.2 # Для Excel экспорта
+openpyxl==3.1.5 # Для экспорта Excel через pandas
+defusedxml==0.7.1
+python-dotenv==1.1.1 # Для переменных окружения и замена dotenv
+packageurl-python==0.17.5 # Для разбора PURL зависимостей
+Pygments==2.19.2 # Для последующей конвертации
+requests==2.32.5 # HTTP-запросы
+rich==14.1.0 # Стилизация
+shellingham==1.5.4 # Определение sh в системе
+soupsieve==2.7
+typer==0.12.5
+typing_extensions==4.14.1
+markdown-it-py==4.0.0
+mdurl==0.1.2
+numpy==2.3.2
+
+# urllib3==2.5.0 # Подтянется как зависимость /requests
+# tzdata==2025.2 # Подтянутся с pandas/requests, их можно не указывать явно.
+# six==1.17.0 # Подтянутся с pandas/requests, их можно не указывать явно.
+# pytz==2025.2 # Подтянутся с pandas/requests, их можно не указывать явно.
+# python-dateutil==2.9.0.post0 # Подтянутся с pandas/requests, их можно не указывать явно.
+# idna==3.10 # Подтянутся с pandas/requests, их можно не указывать явно.
+
+# bs4==0.0.2  # переходник
