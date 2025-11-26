@@ -193,13 +193,52 @@ cdxgen -r рекурсивно сканирует директорию прое�
 Ключевой артефакт, который ты дальше можешь брать как “единый источник правды” для formatter.py и внешних систем:
 	•	secgensbom_out/merged-bom-signed.json — общий подписанный SBOM с учётом дедуплификации.
 
+formatter
 
 docker build -f Dockerfile.formatter -t sbom-formatter:latest .
-docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+docker run --rm -it \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  sbom-formatter:latest
+
+
+secgensbom (SBOM‑пайплайн)
+
+docker build -f Dockerfile.formatter -t sbom-formatter:inside .
+docker images | grep sbom-formatter
+docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest . 
+# либо с --no-cache при возможных ошибках
+docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+trivy image --format cyclonedx -o secgensbom_out/image-bom-trivy.json sbom-formatter:latest # с хоста, вне контейнера
+
+export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
+docker run --rm -it \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  secgensbom-tool:latest \
+  /app/secgensbom/pipeline.sh
+
+
+
+
+
+так Docker Desktop на macOS сам подтянет x86‑слой  cyclonedx/cyclonedx-cli:latest  и будет прогонять его через встроенную виртуализацию для amd64.
+
+
+// docker run --rm -it secgensbom-tool:latest /app/secgensbom/sbom_generate.sh
+// docker run --rm -it secgensbom-tool:latest /app/secgensbom/sbom_merge_sign.sh
+
+
 
 rm sbom/git/.DS_Store
 find . -name ".DS_Store" -delete
 
+git submodule init
+git submodule update
 
 ***
 
