@@ -419,6 +419,24 @@ docker run --rm -it \
   secgensbom-tool:latest \
   /app/secgensbom/sbom_dedup.sh
 
+# Натравить formatter на артефакты secgensbom_out, так как при ручном запуске читает из /sbom
+
+mkdir -p secgensbom_reports/excel
+mkdir -p secgensbom_reports/odt
+
+docker build -f Dockerfile.formatter -t sbom-formatter:latest .
+docker run --rm -it \
+  -v "$(pwd)/script:/app/script" \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v "$(pwd)/secgensbom_reports:/app/secgensbom_reports" \
+  sbom-formatter:latest \
+  python /app/script/formatter.py
+
+
+
+
 
 # Clair
 

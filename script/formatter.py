@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from sbom_handler import SbomHandler
 from exporter import Exporter
 from dependency import Dependency
+from pathlib import Path
 
 logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
