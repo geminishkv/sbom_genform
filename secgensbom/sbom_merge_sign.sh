@@ -53,7 +53,7 @@ docker run --rm \
 echo "[sbom_merge_sign] Подпись SBOM через cdxgen (npx)..."
 npx @cyclonedx/cdxgen --sign \
   --spec-version 1.5 \
-  --input-bom "${MERGED_SBOM_DEDUP}" \
+  --input-bom "${HOST_OUTPUT_DIR}/merged-bom-dedup.json" \
   --output "${SIGNED_SBOM}"
 
 echo "[sbom_merge_sign] Подписанный SBOM -> ${SIGNED_SBOM}"
