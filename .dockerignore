@@ -1,0 +1,77 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Python/venv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.log
+.env
+.env.*
+*.env
+venv/
+.venv/
+
+# Node/npm/yarn
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Docker, artifacts, testcases
+Dockerfile*
+*.dockerfile
+*.tar
+secgensbom_out/
+sca_reports/
+reports/
+sbom/
+.coverage
+htmlcov/
+pytest.cache/
+.tox/
+.mypy_cache/
+.pytest_cache/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Логи приложения
+*.log
+script/app.log
+
+# Разное архивы/дампы
+*.zip
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.rar
+*.dump
+*.sql
+*.sqlite
+*.db
