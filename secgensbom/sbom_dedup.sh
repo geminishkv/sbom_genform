@@ -7,7 +7,6 @@ source "${SCRIPT_DIR}/config.env"
 APP_SBOM="${OUTPUT_DIR}/app-bom-cdxgen.json"
 DEDUP_SBOM="${OUTPUT_DIR}/app-bom-dedup.json"
 
-# Хостовый путь до OUTPUT_DIR (прокидывается извне, иначе fallback)
 HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR:-${OUTPUT_DIR}}"
 
 echo "[sbom_dedup] OUTPUT_DIR=${OUTPUT_DIR}"
