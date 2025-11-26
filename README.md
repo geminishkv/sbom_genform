@@ -309,6 +309,24 @@ docker run --rm -it \
   /app/secgensbom/pipeline.sh
 
  
+
+# Сначала делаем руками и после можно автоматически так
+python3 script/setup_secgensbom_env.py
+
+vim ~/.zshrc
+
+secgensbom_env() {
+  local out
+  out="$(python3 script/setup_secgensbom_env.py)"
+  eval "export ${out//$'\n'/; export }"
+}
+
+source ~/.zshrc
+nano ~/.bashrc
+source ~/.bashrc
+secgensbom_env
+
+
 # Запуск и сборка
 
 docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
@@ -358,6 +376,49 @@ docker run --rm -it \
   -e OUTPUT_DIR="/app/secgensbom_out" \
   secgensbom-tool:latest \
   /app/secgensbom/sbom_dedup.sh
+
+
+
+# Для сборки на сейчас без Clair
+
+mkdir -p project_inject
+mkdir -p secgensbom_out
+mkdir -p secgensbom_out/dependency-check
+mkdir -p secgensbom_out/trivy
+mkdir -p .dependency-check-data
+
+docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+export HOST_PROJECT_DIR="$(pwd)/project_inject"
+export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
+export HOST_DEP_REPORT_DIR="$(pwd)/secgensbom_out/dependency-check"
+export HOST_TRIVY_REPORT_DIR="$(pwd)/secgensbom_out/trivy"
+export DEP_CHECK_DATA="$(pwd)/.dependency-check-data"
+
+docker run --rm -it \
+  -v "$(pwd)/project_inject:/app/project_inject" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e PROJECT_DIR="/app/project_inject" \
+  -e HOST_PROJECT_DIR="${HOST_PROJECT_DIR}" \
+  -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
+  -e HOST_DEP_REPORT_DIR="${HOST_DEP_REPORT_DIR}" \
+  -e HOST_TRIVY_REPORT_DIR="${HOST_TRIVY_REPORT_DIR}" \
+  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \
+  -e OUTPUT_DIR="/app/secgensbom_out" \
+  secgensbom-tool:latest \
+  /app/secgensbom/pipeline.sh
+
+# Дедупликация
+docker run --rm -it \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e OUTPUT_DIR="/app/secgensbom_out" \
+  secgensbom-tool:latest \
+  /app/secgensbom/sbom_dedup.sh
+
+
 
 
 
