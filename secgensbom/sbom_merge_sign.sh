@@ -8,11 +8,11 @@ MERGED_SBOM_RAW="${OUTPUT_DIR}/merged-bom-raw.json"
 MERGED_SBOM_DEDUP="${OUTPUT_DIR}/merged-bom-dedup.json"
 SIGNED_SBOM="${OUTPUT_DIR}/merged-bom-signed.json"
 
-HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR:-}"
-if [ -z "${HOST_OUTPUT_DIR}" ]; then
-  echo "[sbom_merge_sign] HOST_OUTPUT_DIR не задан, используем OUTPUT_DIR (${OUTPUT_DIR})"
-  HOST_OUTPUT_DIR="${OUTPUT_DIR}"
-fi
+# HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR:-}"
+# if [ -z "${HOST_OUTPUT_DIR}" ]; then
+#   echo "[sbom_merge_sign] HOST_OUTPUT_DIR не задан, используем OUTPUT_DIR (${OUTPUT_DIR})"
+#   HOST_OUTPUT_DIR="${OUTPUT_DIR}"
+# fi
 
 command -v docker >/dev/null 2>&1 || { echo "docker не найден в PATH (для cyclonedx-cli в контейнере)"; exit 1; }
 # command -v cyclonedx >/dev/null 2>&1 || { echo "cyclonedx CLI (cyclonedx) не найден в PATH"; exit 1; }
