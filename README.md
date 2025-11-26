@@ -257,6 +257,29 @@ docker run --rm -it \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
 
+# обычный порядок
+
+mkdir -p secgensbom_out
+mkdir -p "$DEP_CHECK_DATA"
+
+export DEP_CHECK_DATA="$(pwd)/.dependency-check-data"
+export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
+export HOST_PROJECT_DIR="$(pwd)/script"
+
+docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+# SBOM + подпись + depcheck и т.п.
+docker run --rm -it \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
+  -e HOST_PROJECT_DIR="${HOST_PROJECT_DIR}" \
+  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \
+  secgensbom-tool:latest \
+  /app/secgensbom/pipeline.sh
+
 
 # Дедупликация
 docker run --rm -it \
@@ -264,10 +287,6 @@ docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock \
   secgensbom-tool:latest \
   /app/secgensbom/sbom_dedup.sh
-
-
-
-
 
 
 так Docker Desktop на macOS сам подтянет x86‑слой  cyclonedx/cyclonedx-cli:latest  и будет прогонять его через встроенную виртуализацию для amd64.

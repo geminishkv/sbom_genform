@@ -16,13 +16,12 @@ command -v docker >/dev/null 2>&1 || { echo "docker не найден в PATH"; 
 
 echo "[depcheck] Запуск OWASP Dependency-Check (Docker) по script/..."
 docker run --rm \
-  -v "${PROJECT_DIR}:/src:ro" \
-  -v "${DEP_CHECK_DATA}:/usr/share/dependency-check/data" \
+  --platform linux/amd64 \
+  -v "${HOST_PROJECT_DIR}:/src" \
   -v "${DEP_REPORT_DIR}:/report" \
   owasp/dependency-check:latest \
   --scan /src \
   --format "ALL" \
-  --project "secgensbom-project" \
   --out /report
 
 echo "[depcheck] Отчёты -> ${DEP_REPORT_DIR}"
