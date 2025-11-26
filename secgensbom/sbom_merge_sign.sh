@@ -4,8 +4,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.env"
 
 APP_SBOM="${OUTPUT_DIR}/app-bom-cdxgen.json"
-MERGED_SBOM_RAW="${OUTPUT_DIR}/merged-bom-raw.json"
-MERGED_SBOM_DEDUP="${OUTPUT_DIR}/merged-bom-dedup.json"
+MERGED_SBOM_RAW="merged-bom-raw.json"
+MERGED_SBOM_DEDUP="merged-bom-dedup.json"
 SIGNED_SBOM="${OUTPUT_DIR}/merged-bom-signed.json"
 
 HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR:-}"
@@ -16,17 +16,34 @@ fi
 
 # command -v docker >/dev/null 2>&1 || { echo "docker не найден в PATH (для cyclonedx-cli в контейнере)"; exit 1; }
 # command -v cyclonedx >/dev/null 2>&1 || { echo "cyclonedx CLI (cyclonedx) не найден в PATH"; exit 1; }
-command -v npx    >/dev/null 2>&1 || { echo "npx не найден в PATH"; exit 1; }
+command -v npx >/dev/null 2>&1 || { echo "npx не найден в PATH"; exit 1; }
+
+echo "[sbom_merge_sign] APP_SBOM=${APP_SBOM}" # debug
+echo "[sbom_merge_sign] HOST_OUTPUT_DIR=${HOST_OUTPUT_DIR}" # debug
 
 echo "[sbom_merge_sign] Подготовка исходного SBOM..."
 # Пока используем только APP_SBOM, без image-BOM
 # cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/merged-bom-raw.json"
-cp "${APP_SBOM}" "${MERGED_SBOM_RAW}"
+mkdir -p "${HOST_OUTPUT_DIR}"
+cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/merged-bom-raw.json"
 
 # echo "[sbom_merge_sign] Дедупликация компонентов..."
 # cyclonedx truncate \
 #   --input-file "${MERGED_SBOM_RAW}" \
 #   --output-file "${MERGED_SBOM_DEDUP}"
+
+echo "[sbom_merge_sign] Проверка наличия APP_SBOM..."
+if [ ! -f "${APP_SBOM}" ]; then
+  echo "[sbom_merge_sign] Файл ${APP_SBOM} не найден"
+  exit 1
+fi
+
+echo "[sbom_merge_sign] Подготовка исходного SBOM..."
+mkdir -p "${HOST_OUTPUT_DIR}"
+cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/${MERGED_SBOM_RAW}"
+
+echo "[sbom_merge_sign] Содержимое HOST_OUTPUT_DIR после cp:"
+ls -l "${HOST_OUTPUT_DIR}" || true
 
 echo "[sbom_merge_sign] Дедупликация компонентов через cyclonedx-cli merge (docker)..."
 docker run --rm \
@@ -34,9 +51,9 @@ docker run --rm \
   -v "${HOST_OUTPUT_DIR}:/work" \
   cyclonedx/cyclonedx-cli:latest \
   merge \
-  --input-files "/work/merged-bom-raw.json" "/work/merged-bom-raw.json" \
+  --input-files "/work/${MERGED_SBOM_RAW}" "/work/${MERGED_SBOM_RAW}" \
   --output-format json \
-  --output-file "/work/merged-bom-dedup.json"
+  --output-file "/work/${MERGED_SBOM_DEDUP}"
 
 # echo "[sbom_merge_sign] Валидация итогового SBOM..."
 # cyclonedx validate \
@@ -48,12 +65,12 @@ docker run --rm \
   -v "${HOST_OUTPUT_DIR}:/work" \
   cyclonedx/cyclonedx-cli:latest \
   validate \
-  --input-file "/work/merged-bom-dedup.json"
+  --input-file "/work/${MERGED_SBOM_DEDUP}"
 
 echo "[sbom_merge_sign] Подпись SBOM через cdxgen (npx)..."
 npx @cyclonedx/cdxgen --sign \
   --spec-version 1.5 \
-  --input-bom "${HOST_OUTPUT_DIR}/merged-bom-dedup.json" \
+  --input-bom "${HOST_OUTPUT_DIR}/${MERGED_SBOM_DEDUP}" \
   --output "${SIGNED_SBOM}"
 
 echo "[sbom_merge_sign] Подписанный SBOM -> ${SIGNED_SBOM}"

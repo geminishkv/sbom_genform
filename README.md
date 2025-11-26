@@ -214,7 +214,6 @@ docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
 trivy image --format cyclonedx -o secgensbom_out/image-bom-trivy.json sbom-formatter:latest # с хоста, вне контейнера
 
 export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
-
 docker run --rm -it \
   -v "$(pwd)/sbom:/app/sbom" \
   -v "$(pwd)/reports:/app/reports" \
@@ -223,6 +222,20 @@ docker run --rm -it \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
 
+
+# Проверка наличия docker
+docker run --rm -it secgensbom-tool:latest /bin/bash
+which docker
+docker --version
+-e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
+secgensbom-tool:latest \
+env | grep HOST_OUTPUT_DIR
+exit
+
+unset HOST_OUTPUT_DIR
+export HOST_OUTPUT_DIR=”$(pwd)/secgensbom_out”
+env | grep HOST_OUTPUT_DIR
+docker run
 
 
 так Docker Desktop на macOS сам подтянет x86‑слой  cyclonedx/cyclonedx-cli:latest  и будет прогонять его через встроенную виртуализацию для amd64.
