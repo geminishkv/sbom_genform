@@ -76,7 +76,18 @@ sbom_project/
 	•	Классы Exporter и SbomHandler отвечают за сборку, экспорт и обработку SBOM-файлов.
 	•	Класс Dependency определяет детали и происхождение каждой зависимости через сторонние API.
 	•	Весь процесс автоматизирует формирование отчетов для аудита сторонних библиотек в виде Excel/ODT, используя две указанной директории.
-    
+
+
+Работа из окружения
+python3 -m venv venv 
+source venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python formatter.py
+deactivate
+
+
+
 ***
 
 ### Сопроводительыне материалы
