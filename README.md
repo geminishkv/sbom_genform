@@ -405,7 +405,7 @@ docker run --rm -it \
   -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
   -e HOST_DEP_REPORT_DIR="${HOST_DEP_REPORT_DIR}" \
   -e HOST_TRIVY_REPORT_DIR="${HOST_TRIVY_REPORT_DIR}" \
-  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \
+  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \ # Долгая работа, первично, далее оптимизируется
   -e OUTPUT_DIR="/app/secgensbom_out" \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh

@@ -13,6 +13,7 @@ SANITIZED_IMAGE="${IMAGE_TO_SCAN//[:\/]/_}"
 echo "[clair] Анализ образа через Clair (clairctl container): ${IMAGE_TO_SCAN}..."
 echo "[clair] CLAIR_REPORT_DIR=${CLAIR_REPORT_DIR}"
 
+set +e
 docker run --rm \
   --platform linux/amd64 \
   -v "${CLAIR_REPORT_DIR}:/reports" \
@@ -24,6 +25,13 @@ docker run --rm \
     --format json \
     --output "/reports/clair-${SANITIZED_IMAGE}.json" \
     "${IMAGE_TO_SCAN}"
+status=$?
+set -e
+
+if [ $status -ne 0 ]; then
+  echo "[clair] Ошибка при запуске clairctl (код $status). Шаг Clair пропущен."
+  exit 0
+fi
 
 # if ! command -v clairctl >/dev/null 2>&1; then
 #   echo "[clair] clairctl не найден, шаг Clair пропускается."
