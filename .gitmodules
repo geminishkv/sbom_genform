@@ -1,0 +1,15 @@
+[submodule "tools/cdxgen"]
+    path = tools/cdxgen
+    url = https://github.com/CycloneDX/cdxgen.git
+
+[submodule "tools/trivy"]
+    path = tools/trivy
+    url = https://github.com/aquasecurity/trivy.git
+
+[submodule "tools/dependency-check"]
+    path = tools/dependency-check
+    url = https://github.com/jeremylong/DependencyCheck.git
+
+[submodule "tools/clair"]
+    path = tools/clair
+    url = https://github.com/quay/clair.git
