@@ -5,9 +5,9 @@ source "${SCRIPT_DIR}/config.env"
 
 echo "[pipeline] REPO_ROOT=${REPO_ROOT}"
 echo "[pipeline] PROJECT_DIR=${PROJECT_DIR}"
+echo "[pipeline] OUTPUT_DIR=${OUTPUT_DIR}"
 # echo "[pipeline] SBOM_DIR=${SBOM_DIR}"
 # echo "[pipeline] REPORTS_DIR=${REPORTS_DIR}"
-echo "[pipeline] OUTPUT_DIR=${OUTPUT_DIR}"
 # echo "[pipeline] IMAGE_NAME=${IMAGE_NAME}"
 
 echo "[pipeline] Старт SBOM/SCA пайплайна (secgensbom)..."
@@ -15,6 +15,8 @@ echo "[pipeline] Старт SBOM/SCA пайплайна (secgensbom)..."
 /app/secgensbom/sbom_generate.sh
 /app/secgensbom/sbom_merge_sign.sh
 /app/secgensbom/scan_dependency_check.sh
+/app/secgensbom/scan_trivy.sh
+/app/secgensbom/scan_clair.sh
 
 echo "[pipeline] Пайплайн завершён."
 

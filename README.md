@@ -317,11 +317,49 @@ docker run --rm -it \
   /app/secgensbom/sbom_dedup.sh
 
 
+
+
+mkdir -p project_inject
+mkdir -p secgensbom_out
+mkdir -p secgensbom_out/dependency-check
+mkdir -p secgensbom_out/trivy
+mkdir -p .dependency-check-data
+
+docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+export HOST_PROJECT_DIR="$(pwd)/project_inject"
+export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
+export HOST_DEP_REPORT_DIR="$(pwd)/secgensbom_out/dependency-check"
+export HOST_TRIVY_REPORT_DIR="$(pwd)/secgensbom_out/trivy"
+export DEP_CHECK_DATA="$(pwd)/.dependency-check-data"
+
+docker run --rm -it \
+  -v "$(pwd)/project_inject:/app/project_inject" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e PROJECT_DIR="/app/project_inject" \
+  -e HOST_PROJECT_DIR="${HOST_PROJECT_DIR}" \
+  -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
+  -e HOST_DEP_REPORT_DIR="${HOST_DEP_REPORT_DIR}" \
+  -e HOST_TRIVY_REPORT_DIR="${HOST_TRIVY_REPORT_DIR}" \
+  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \
+  -e OUTPUT_DIR="/app/secgensbom_out" \
+  secgensbom-tool:latest \
+  /app/secgensbom/pipeline.sh
+
+# дедупликация
+docker run --rm -it \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e OUTPUT_DIR="/app/secgensbom_out" \
+  secgensbom-tool:latest \
+  /app/secgensbom/sbom_dedup.sh
+
+
+
 так Docker Desktop на macOS сам подтянет x86‑слой  cyclonedx/cyclonedx-cli:latest  и будет прогонять его через встроенную виртуализацию для amd64.
 
-
-// docker run --rm -it secgensbom-tool:latest /app/secgensbom/sbom_generate.sh
-// docker run --rm -it secgensbom-tool:latest /app/secgensbom/sbom_merge_sign.sh
 
 
 

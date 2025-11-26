@@ -9,6 +9,10 @@ SIGNED_SBOM="${OUTPUT_DIR}/merged-bom-signed.json"
 
 command -v npx >/dev/null 2>&1 || { echo "npx не найден в PATH"; exit 1; }
 
+echo "[sbom_merge_sign] OUTPUT_DIR=${OUTPUT_DIR}"
+echo "[sbom_merge_sign] APP_SBOM=${APP_SBOM}"
+echo "[sbom_merge_sign] SIGNED_SBOM=${SIGNED_SBOM}"
+
 echo "[sbom_merge_sign] Проверка наличия исходного SBOM..."
 if [ ! -f "${APP_SBOM}" ]; then
   echo "[sbom_merge_sign] Файл ${APP_SBOM} не найден"

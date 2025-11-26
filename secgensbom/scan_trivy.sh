@@ -4,23 +4,33 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.env"
 
-SIGNED_SBOM="${OUTPUT_DIR}/merged-bom-signed.json"
 TRIVY_REPORT_DIR="${OUTPUT_DIR}/trivy"
-
 mkdir -p "${TRIVY_REPORT_DIR}"
 
-command -v trivy >/dev/null 2>&1 || { echo "[trivy] trivy не найден в PATH"; exit 1; }
+HOST_TRIVY_REPORT_DIR="${HOST_TRIVY_REPORT_DIR:-${TRIVY_REPORT_DIR}}"
+mkdir -p "${HOST_TRIVY_REPORT_DIR}"
+
+echo "[trivy] PROJECT_DIR=${PROJECT_DIR}"
+echo "[trivy] HOST_TRIVY_REPORT_DIR=${HOST_TRIVY_REPORT_DIR}"
 
 echo "[trivy] Сканирование контейнерного образа ${IMAGE_NAME}..."
-trivy image --quiet \
+trivy fs --scanners vuln,secret,config \
+  --exit-code 0 \
   --format json \
-  --output "${TRIVY_REPORT_DIR}/image-vulns.json" \
-  "${IMAGE_NAME}"
+  --output "${TRIVY_REPORT_DIR}/trivy-fs.json" \
+  "${PROJECT_DIR}"
 
-echo "[trivy] Сканирование итогового SBOM..."
-trivy sbom --quiet \
-  --format json \
-  --output "${TRIVY_REPORT_DIR}/sbom-vulns.json" \
-  "${SIGNED_SBOM}"
+echo "[trivy] Отчёт fs -> ${TRIVY_REPORT_DIR}/trivy-fs.json"
 
-echo "[trivy] Отчёты -> ${TRIVY_REPORT_DIR}"
+SIGNED_SBOM="${OUTPUT_DIR}/merged-bom-signed.json"
+
+if [ -f "${SIGNED_SBOM}" ]; then
+  echo "[trivy] Сканирование итогового SBOM..."
+  trivy sbom --quiet \
+    --format json \
+    --output "${TRIVY_REPORT_DIR}/sbom-vulns.json" \
+    "${SIGNED_SBOM}"
+  echo "[trivy] Отчёт sbom -> ${TRIVY_REPORT_DIR}/sbom-vulns.json"
+else
+  echo "[trivy] Подписанный SBOM не найден (${SIGNED_SBOM}), шаг trivy sbom пропущен."
+fi

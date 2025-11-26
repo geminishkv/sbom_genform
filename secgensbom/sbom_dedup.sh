@@ -1,9 +1,9 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.env"
 
-OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/secgensbom_out}"
 APP_SBOM="${OUTPUT_DIR}/app-bom-cdxgen.json"
 DEDUP_SBOM="${OUTPUT_DIR}/app-bom-dedup.json"
 
