@@ -141,32 +141,32 @@ class Dependency:
             logging.exception(f"Ошибка при обработке npm пакета {purlProcessed.name}: {e}")
             return ['JavaScript*'], pkgSrcUrl
 
-def _cleanGitUrl(self, url):
-        logging.debug(f"Очистка git URL: {url}")
-        if url.endswith('.git'):
-            url = url[:-4]
+    def _cleanGitUrl(self, url):
+            logging.debug(f"Очистка git URL: {url}")
+            if url.endswith('.git'):
+                url = url[:-4]
 
-        if url.startswith('git@'):
-            url = url.split(':')[-1]
+            if url.startswith('git@'):
+                url = url.split(':')[-1]
 
-        if url.startswith('git+ssh://git@'):
-            url = url.split('git@github.com/')[-1]
+            if url.startswith('git+ssh://git@'):
+                url = url.split('git@github.com/')[-1]
 
-        parsed_url = urlparse(url)
+            parsed_url = urlparse(url)
 
-        if parsed_url.scheme == 'git+':
-            parsed_url = parsed_url._replace(scheme='https')
+            if parsed_url.scheme == 'git+':
+                parsed_url = parsed_url._replace(scheme='https')
 
-        if parsed_url.netloc.startswith('www.'):
-            parsed_url = parsed_url._replace(netloc=parsed_url.netloc[4:])
+            if parsed_url.netloc.startswith('www.'):
+                parsed_url = parsed_url._replace(netloc=parsed_url.netloc[4:])
 
-        if parsed_url.netloc == 'github.com':
-            cleaned_url = parsed_url.path.lstrip('/')
-        else:
-            cleaned_url = urlunparse(parsed_url)
+            if parsed_url.netloc == 'github.com':
+                cleaned_url = parsed_url.path.lstrip('/')
+            else:
+                cleaned_url = urlunparse(parsed_url)
 
-        logging.debug(f"Очищенный git URL: {cleaned_url}")
-        return cleaned_url
+            logging.debug(f"Очищенный git URL: {cleaned_url}")
+            return cleaned_url
 
     def processPurl(self, purl: str):
         logging.info(f"processPurl: {purl}")
@@ -216,35 +216,35 @@ def _cleanGitUrl(self, url):
         return hash(self.purl)
 
 
-def processSboms(sbom_dir, report_dir):
-    logging.info(f"processSboms: {sbom_dir} -> {report_dir}")
-    handler = SbomHandler(sbom_dir)
-    for sbomPath in handler.sbomsList:
-        try:
-            logging.info(f"Обработка SBOM: {sbomPath}")
-            sbomContent = handler.readJson(sbomPath)
+    def processSboms(sbom_dir, report_dir):
+        logging.info(f"processSboms: {sbom_dir} -> {report_dir}")
+        handler = SbomHandler(sbom_dir)
+        for sbomPath in handler.sbomsList:
+            try:
+                logging.info(f"Обработка SBOM: {sbomPath}")
+                sbomContent = handler.readJson(sbomPath)
 
-            if sbomContent is None:
-                logging.warning("SBOM не удалось прочитать или он некорректен -> пропуск")
-                continue
+                if sbomContent is None:
+                    logging.warning("SBOM не удалось прочитать или он некорректен -> пропуск")
+                    continue
 
-            base = os.path.basename(sbomPath).replace('.json', '')
-            excelName = f"{report_dir}/excel/{base}.xlsx"
-            odtName = f"{report_dir}/odt/{base}.odt"
+                base = os.path.basename(sbomPath).replace('.json', '')
+                excelName = f"{report_dir}/excel/{base}.xlsx"
+                odtName = f"{report_dir}/odt/{base}.odt"
 
-            if os.path.exists(excelName) and os.path.exists(odtName):
-                logging.info(f"Отчеты уже существуют ({base}) -> пропуск")
-                continue
+                if os.path.exists(excelName) and os.path.exists(odtName):
+                    logging.info(f"Отчеты уже существуют ({base}) -> пропуск")
+                    continue
 
-            allDependencies = [
-                Dependency(c['name'], c['version'], [], c['purl'], sbomPath)
-                for c in sbomContent.get('components', []) if c.get('type') == 'library'
-            ]
+                allDependencies = [
+                    Dependency(c['name'], c['version'], [], c['purl'], sbomPath)
+                    for c in sbomContent.get('components', []) if c.get('type') == 'library'
+                ]
 
-            logging.info(f"Собрано внешних зависимостей: {len(allDependencies)}")
+                logging.info(f"Собрано внешних зависимостей: {len(allDependencies)}")
 
-            exporter = Exporter(allDependencies)
-            exporter.exportToExcel(excelName)
-            exporter.exportToOdt(odtName)
-        except Exception as e:
-            logging.exception(f"Ошибка при обработке файла {sbomPath}: {e}")
+                exporter = Exporter(allDependencies)
+                exporter.exportToExcel(excelName)
+                exporter.exportToOdt(odtName)
+            except Exception as e:
+                logging.exception(f"Ошибка при обработке файла {sbomPath}: {e}")

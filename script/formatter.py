@@ -33,7 +33,7 @@ def process_sboms(sbom_dir, report_dir):
 
 if __name__ == "__main__":
     logging.info("Старт обработки SBOM файлов")
-    process_sboms("sboms/gitlab", "reports/gitlab")
+    process_sboms("../sbom/git", "../reports/git")
     logging.info("Переходим к images")
-    process_sboms("sboms/images", "reports/images")
+    process_sboms("../sbom/images", "../reports/images")
     logging.info("Обработка завершена")

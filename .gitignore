@@ -23,13 +23,13 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-venv/
-.venv/
 
 # Secrets and environment configs
 .env
 .env.*
 *.env
+venv/
+.venv/
 
 # IDE/editor files
 .vscode/
@@ -41,21 +41,19 @@ venv/
 logs/
 *.pid
 
-# Office/data exports (отчёты)
+# Office/data exports
 *.odt
 *.xlsx
 *.xls
 reports/
 output/
+sbom/git/*
+sbom/images/*
 
-# Databases (если вдруг используются)
+# Databases
 *.sqlite
 *.db
 *.sql
-
-# System files (MacOS/Windows)
-.DS_Store
-Thumbs.db
 
 # Jupyter/Notebook
 .ipynb_checkpoints
@@ -69,7 +67,7 @@ Thumbs.db
 *.7z
 *.rar
 
-# Remove if you do NOT use Node.js!
+# Node.js!
 node_modules/
 /node_modules
 dist/
