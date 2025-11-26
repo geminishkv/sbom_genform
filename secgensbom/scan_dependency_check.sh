@@ -3,10 +3,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.env"
 
+HOST_PROJECT_DIR="${HOST_PROJECT_DIR:-${PROJECT_DIR}}"
 DEP_REPORT_DIR="${OUTPUT_DIR}/dependency-check"
 
 mkdir -p "${DEP_CHECK_DATA}" "${DEP_REPORT_DIR}"
 
+echo "[depcheck] HOST_PROJECT_DIR=${HOST_PROJECT_DIR}"
 echo "[depcheck] PROJECT_DIR=${PROJECT_DIR}"
 echo "[depcheck] DEP_REPORT_DIR=${DEP_REPORT_DIR}"
 

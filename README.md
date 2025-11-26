@@ -213,7 +213,9 @@ docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
 
 trivy image --format cyclonedx -o secgensbom_out/image-bom-trivy.json sbom-formatter:latest # с хоста, вне контейнера
 
+rm -f secgensbom_out/*
 export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
+
 docker run --rm -it \
   -v "$(pwd)/sbom:/app/sbom" \
   -v "$(pwd)/reports:/app/reports" \
@@ -221,6 +223,7 @@ docker run --rm -it \
   -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
+
 
 
 # Проверка наличия docker
@@ -236,6 +239,35 @@ unset HOST_OUTPUT_DIR
 export HOST_OUTPUT_DIR=”$(pwd)/secgensbom_out”
 env | grep HOST_OUTPUT_DIR
 docker run
+
+
+
+docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+mkdir -p secgensbom_out
+
+export HOST_PROJECT_DIR="$(pwd)/script"
+
+docker run --rm -it \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e HOST_PROJECT_DIR="${HOST_PROJECT_DIR}" \
+  secgensbom-tool:latest \
+  /app/secgensbom/pipeline.sh
+
+
+# Дедупликация
+docker run --rm -it \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  secgensbom-tool:latest \
+  /app/secgensbom/sbom_dedup.sh
+
+
+
+
 
 
 так Docker Desktop на macOS сам подтянет x86‑слой  cyclonedx/cyclonedx-cli:latest  и будет прогонять его через встроенную виртуализацию для amd64.
