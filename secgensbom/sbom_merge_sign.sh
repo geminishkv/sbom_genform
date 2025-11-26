@@ -20,7 +20,8 @@ command -v npx    >/dev/null 2>&1 || { echo "npx не найден в PATH"; exi
 
 echo "[sbom_merge_sign] Подготовка исходного SBOM..."
 # Пока используем только APP_SBOM, без image-BOM
-cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/merged-bom-raw.json"
+# cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/merged-bom-raw.json"
+cp "${APP_SBOM}" "${MERGED_SBOM_RAW}"
 
 # echo "[sbom_merge_sign] Дедупликация компонентов..."
 # cyclonedx truncate \
@@ -30,7 +31,7 @@ cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/merged-bom-raw.json"
 echo "[sbom_merge_sign] Дедупликация компонентов через cyclonedx-cli merge (docker)..."
 docker run --rm \
   --platform linux/amd64 \
-  -v "${HOST_OUTPUT_DIR}:/work" \
+  -v "${OUTPUT_DIR}:/work" \
   cyclonedx/cyclonedx-cli:latest \
   merge \
   --input-files "/work/merged-bom-raw.json" "/work/merged-bom-raw.json" \
@@ -44,7 +45,7 @@ docker run --rm \
 echo "[sbom_merge_sign] Валидация SBOM через cyclonedx-cli (docker)..."
 docker run --rm \
   --platform linux/amd64 \
-  -v "${HOST_OUTPUT_DIR}:/work" \
+  -v "${OUTPUT_DIR}:/work" \
   cyclonedx/cyclonedx-cli:latest \
   validate \
   --input-file "/work/merged-bom-dedup.json"
@@ -54,7 +55,8 @@ export SBOM_SIGN_ALGORITHM SBOM_SIGN_PRIVATE_KEY SBOM_SIGN_PUBLIC_KEY
 
 npx @cyclonedx/cdxgen --sign \
   --spec-version 1.5 \
-  --input-bom "${HOST_OUTPUT_DIR}/merged-bom-dedup.json" \
+#  --input-bom "${HOST_OUTPUT_DIR}/merged-bom-dedup.json" \
+  --input-bom "${MERGED_SBOM_DEDUP}" \
   --output "${SIGNED_SBOM}"
 
 echo "[sbom_merge_sign] Подписанный SBOM -> ${SIGNED_SBOM}"
