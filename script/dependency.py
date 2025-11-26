@@ -1,5 +1,6 @@
 import logging
 import requests
+from urllib.parse import urlparse
 from packageurl import PackageURL
 DepsMemory = [] # для отслеживания обработанных зависимостей
 
