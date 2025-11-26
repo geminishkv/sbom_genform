@@ -107,6 +107,28 @@ cdxgen -r рекурсивно сканирует директорию прое�
 
 
 
+Шаги:
+
+	•	из корня репо:
+	•	docker build -t sbom-formatter:latest .
+ права:
+	•	cd secgensbom
+	•	chmod +x *.sh
+
+	•	из secgensbom:
+	•	./pipeline.sh
+
+	•	REPO_ROOT=/path/to/repo IMAGE_NAME=myapp:latest ./pipeline.sh
+На выходе:
+	•	secgensbom_out/app-bom-cdxgen.json — SBOM по коду (script/).
+	•	secgensbom_out/image-bom-trivy.json — SBOM по образу.
+	•	secgensbom_out/merged-bom-signed.json — общий подписанный SBOM с дедупликацией.
+	•	secgensbom_out/dependency-check/* — отчёты SCA.
+	•	secgensbom_out/trivy/* — отчёты Trivy по образу и SBOM.
+	•	secgensbom_out/clair/* — отчёты Clair (если настроен).
+
+
+
 ***
 
 ### Сопроводительыне материалы
