@@ -13,19 +13,14 @@ echo "[sbom_generate] PROJECT_DIR=${PROJECT_DIR}"
 echo "[sbom_generate] IMAGE_NAME=${IMAGE_NAME}"
 echo "[sbom_generate] OUTPUT_DIR=${OUTPUT_DIR}"
 
-command -v docker >/dev/null 2>&1 || { echo "docker не найден в PATH"; exit 1; }
-command -v trivy  >/dev/null 2>&1 || { echo "trivy не найден в PATH"; exit 1; }
+command -v npx   >/dev/null 2>&1 || { echo "npx не найден в PATH"; exit 1; }
+command -v trivy >/dev/null 2>&1 || { echo "trivy не найден в PATH"; exit 1; }
 
-echo "[sbom_generate] Генерация SBOM по исходникам (script/) через cdxgen (Docker)..."
-docker run --rm \
-  -v "${PROJECT_DIR}:/src:ro" \
-  -v "${OUTPUT_DIR}:/out" \
-  cyclonedx/cdxgen:latest \
-  -r \
-  -o "/out/app-bom-cdxgen.json" \
-  --spec-version 1.5 \
-  /src
-
+echo "[sbom_generate] Генерация SBOM по исходникам (script/) через cdxgen (npx)..."
+(
+  cd "${PROJECT_DIR}"
+  npx @cyclonedx/cdxgen -r -o "${APP_SBOM}" --spec-version 1.5
+)
 echo "[sbom_generate] APP SBOM -> ${APP_SBOM}"
 
 echo "[sbom_generate] Генерация SBOM по контейнерному образу через Trivy (CycloneDX)..."
