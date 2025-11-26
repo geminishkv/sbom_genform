@@ -380,6 +380,7 @@ docker run --rm -it \
 
 
 # Для сборки на сейчас без Clair
+# Если clairctl недоступен, шаг логируется как “ошибка, пропущен”
 
 mkdir -p project_inject
 mkdir -p secgensbom_out
@@ -405,7 +406,7 @@ docker run --rm -it \
   -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
   -e HOST_DEP_REPORT_DIR="${HOST_DEP_REPORT_DIR}" \
   -e HOST_TRIVY_REPORT_DIR="${HOST_TRIVY_REPORT_DIR}" \
-  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \ # Долгая работа, первично, далее оптимизируется
+  -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \
   -e OUTPUT_DIR="/app/secgensbom_out" \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
@@ -419,7 +420,15 @@ docker run --rm -it \
   /app/secgensbom/sbom_dedup.sh
 
 
+# Clair
 
+	•	Завести учётку на quay.io, выдать token, сделать  docker login quay.io  на хосте. 
+	•	По желанию — вместо  latest  использовать конкретный тег, указаный в доке Clair ( v4.x.x  и т.д.).
+	•	Поднять сам Clair (Postgres + Clair) по их docker-compose. 
+	•	Настроить  CLAIR_ENDPOINT  и конфиг clairctl.
+Но это не мешает тебе уже сейчас:
+	•	считать, что Clair временно “опциональный” сканер,
+	•	продолжать использовать весь остальной пайплайн без ошибок.
 
 
 так Docker Desktop на macOS сам подтянет x86‑слой  cyclonedx/cyclonedx-cli:latest  и будет прогонять его через встроенную виртуализацию для amd64.

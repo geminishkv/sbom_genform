@@ -28,10 +28,13 @@ docker run --rm \
 status=$?
 set -e
 
+# после docker-compose пофиксить 
 if [ $status -ne 0 ]; then
   echo "[clair] Ошибка при запуске clairctl (код $status). Шаг Clair пропущен."
   exit 0
 fi
+
+echo "[clair] Отчёт -> ${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json"
 
 # if ! command -v clairctl >/dev/null 2>&1; then
 #   echo "[clair] clairctl не найден, шаг Clair пропускается."
@@ -47,4 +50,4 @@ fi
 #   --output "${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json" \
 #   "${IMAGE_NAME}"
 
-echo "[clair] Отчёт -> ${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json"
+№ echo "[clair] Отчёт -> ${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json"
