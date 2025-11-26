@@ -14,7 +14,7 @@ if [ -z "${HOST_OUTPUT_DIR}" ]; then
   HOST_OUTPUT_DIR="${OUTPUT_DIR}"
 fi
 
-command -v docker >/dev/null 2>&1 || { echo "docker не найден в PATH (для cyclonedx-cli в контейнере)"; exit 1; }
+# command -v docker >/dev/null 2>&1 || { echo "docker не найден в PATH (для cyclonedx-cli в контейнере)"; exit 1; }
 # command -v cyclonedx >/dev/null 2>&1 || { echo "cyclonedx CLI (cyclonedx) не найден в PATH"; exit 1; }
 command -v npx    >/dev/null 2>&1 || { echo "npx не найден в PATH"; exit 1; }
 

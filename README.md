@@ -213,18 +213,15 @@ docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
 
 trivy image --format cyclonedx -o secgensbom_out/image-bom-trivy.json sbom-formatter:latest # с хоста, вне контейнера
 
-# export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out" # Второй вариант использования
+export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
 
 docker run --rm -it \
   -v "$(pwd)/sbom:/app/sbom" \
   -v "$(pwd)/reports:/app/reports" \
-  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
-
-
-
 
 
 
