@@ -21,7 +21,7 @@ command -v npx    >/dev/null 2>&1 || { echo "npx не найден в PATH"; exi
 echo "[sbom_merge_sign] Подготовка исходного SBOM..."
 # Пока используем только APP_SBOM, без image-BOM
 # cp "${APP_SBOM}" "${HOST_OUTPUT_DIR}/merged-bom-raw.json"
-cp "${APP_SBOM}" "${MERGED_SBOM_RAW}"
+# cp "${APP_SBOM}" "${MERGED_SBOM_RAW}"
 
 # echo "[sbom_merge_sign] Дедупликация компонентов..."
 # cyclonedx truncate \
