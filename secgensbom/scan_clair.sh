@@ -6,18 +6,37 @@ source "${SCRIPT_DIR}/config.env"
 CLAIR_REPORT_DIR="${OUTPUT_DIR}/clair"
 mkdir -p "${CLAIR_REPORT_DIR}"
 
-if ! command -v clairctl >/dev/null 2>&1; then
-  echo "[clair] clairctl не найден, шаг Clair пропускается."
-  exit 0
-fi
+IMAGE_TO_SCAN="${IMAGE_NAME:-sbom-formatter:inside}"
+SANITIZED_IMAGE="${IMAGE_TO_SCAN//[:\/]/_}"
 
-SANITIZED_IMAGE="${IMAGE_NAME//[:\/]/_}"
+# Поднять Clair и Postgres
+echo "[clair] Анализ образа через Clair (clairctl container): ${IMAGE_TO_SCAN}..."
+echo "[clair] CLAIR_REPORT_DIR=${CLAIR_REPORT_DIR}"
 
-echo "[clair] Анализ образа через Clair: ${IMAGE_NAME}..."
-clairctl report \
-  --log-level info \
-  --format json \
-  --output "${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json" \
-  "${IMAGE_NAME}"
+docker run --rm \
+  --platform linux/amd64 \
+  -v "${CLAIR_REPORT_DIR}:/reports" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e CLAIR_ENDPOINT="${CLAIR_ENDPOINT:-http://clair:8080}" \
+  quay.io/projectclair/clairctl:latest \
+  report \
+    --log-level info \
+    --format json \
+    --output "/reports/clair-${SANITIZED_IMAGE}.json" \
+    "${IMAGE_TO_SCAN}"
+
+# if ! command -v clairctl >/dev/null 2>&1; then
+#   echo "[clair] clairctl не найден, шаг Clair пропускается."
+#   exit 0
+# fi
+
+# SANITIZED_IMAGE="${IMAGE_NAME//[:\/]/_}"
+
+# echo "[clair] Анализ образа через Clair: ${IMAGE_NAME}..."
+# clairctl report \
+#   --log-level info \
+#   --format json \
+#   --output "${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json" \
+#   "${IMAGE_NAME}"
 
 echo "[clair] Отчёт -> ${CLAIR_REPORT_DIR}/clair-${SANITIZED_IMAGE}.json"

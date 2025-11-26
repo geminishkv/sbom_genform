@@ -308,30 +308,31 @@ docker run --rm -it \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
 
+ 
+# Запуск и сборка
 
-# Дедупликация
-docker run --rm -it \
-  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  secgensbom-tool:latest \
-  /app/secgensbom/sbom_dedup.sh
-
-
-
+docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
 
 mkdir -p project_inject
 mkdir -p secgensbom_out
 mkdir -p secgensbom_out/dependency-check
 mkdir -p secgensbom_out/trivy
+mkdir -p secgensbom_out/clair
 mkdir -p .dependency-check-data
 
-docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+# Clair на docker-compose при поднятии двух серверов
 
 export HOST_PROJECT_DIR="$(pwd)/project_inject"
 export HOST_OUTPUT_DIR="$(pwd)/secgensbom_out"
 export HOST_DEP_REPORT_DIR="$(pwd)/secgensbom_out/dependency-check"
 export HOST_TRIVY_REPORT_DIR="$(pwd)/secgensbom_out/trivy"
 export DEP_CHECK_DATA="$(pwd)/.dependency-check-data"
+
+# Образ, который будет сканировать Clair
+export IMAGE_NAME="your-app-image:tag"
+
+# Endpoint Clair-сервера
+export CLAIR_ENDPOINT="http://clair:8080"
 
 docker run --rm -it \
   -v "$(pwd)/project_inject:/app/project_inject" \
@@ -345,6 +346,8 @@ docker run --rm -it \
   -e HOST_TRIVY_REPORT_DIR="${HOST_TRIVY_REPORT_DIR}" \
   -e DEP_CHECK_DATA="${DEP_CHECK_DATA}" \
   -e OUTPUT_DIR="/app/secgensbom_out" \
+  -e IMAGE_NAME="${IMAGE_NAME}" \
+  -e CLAIR_ENDPOINT="${CLAIR_ENDPOINT}" \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
 

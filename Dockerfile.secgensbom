@@ -29,12 +29,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 #     chmod +x /usr/local/bin/cyclonedx
 
 # Clairctl (CLI для Clair)
-ARG CLAIRCTL_VERSION=1.5.4
-RUN curl -sSL "https://github.com/quay/clair/releases/download/v${CLAIRCTL_VERSION}/clairctl-linux-arm64.tar.gz" \
-    -o /tmp/clairctl.tar.gz && \
-    tar -xzf /tmp/clairctl.tar.gz -C /usr/local/bin clairctl && \
-    chmod +x /usr/local/bin/clairctl && \
-    rm -f /tmp/clairctl.tar.gz
+# ARG CLAIRCTL_VERSION=1.5.4
+# RUN curl -sSL "https://github.com/quay/clair/releases/download/v${CLAIRCTL_VERSION}/clairctl-linux-arm64.tar.gz" \
+#     -o /tmp/clairctl.tar.gz && \
+#     tar -xzf /tmp/clairctl.tar.gz -C /usr/local/bin clairctl && \
+#     chmod +x /usr/local/bin/clairctl && \
+#     rm -f /tmp/clairctl.tar.gz
 
 WORKDIR /app
 COPY . /app
