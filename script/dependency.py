@@ -1,6 +1,7 @@
 import logging
 import requests
 from packageurl import PackageURL
+DepsMemory = [] # для отслеживания обработанных зависимостей
 
 class Dependency:
     def __init__(self, name: str, version: str, depType: list, purl: str, pathToSbom: str):
@@ -209,11 +210,11 @@ class Dependency:
 
     def __eq__(self, other):
         if not isinstance(other, Dependency):
-            return False
-        return self.purl == other.purl
+            return NotImplemented
+        return (self.name, self.version, self.purl) == (other.name, other.version, other.purl)
 
     def __hash__(self):
-        return hash(self.purl)
+        return hash((self.name, self.version, self.purl))
 
 
     def processSboms(sbom_dir, report_dir):
