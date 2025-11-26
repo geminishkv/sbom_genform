@@ -1,12 +1,9 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/config.env"
 
-# Каталог с артефактами SBOM (на хосте он будет смонтирован в этот же путь)
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/secgensbom_out}"
-
 APP_SBOM="${OUTPUT_DIR}/app-bom-cdxgen.json"
 DEDUP_SBOM="${OUTPUT_DIR}/app-bom-dedup.json"
 
@@ -19,7 +16,7 @@ if [ ! -f "${APP_SBOM}" ]; then
   exit 1
 fi
 
-echo "[sbom_dedup] Дедупликация компонентов через cyclonedx-cli merge (docker)..."
+echo "[sbom_dedup] Дедупликация через cyclonedx-cli merge (docker)..."
 docker run --rm \
   --platform linux/amd64 \
   -v "${OUTPUT_DIR}:/work" \

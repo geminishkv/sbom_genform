@@ -201,7 +201,9 @@ docker run --rm -it \
   -v "$(pwd)/sbom:/app/sbom" \
   -v "$(pwd)/reports:/app/reports" \
   sbom-formatter:latest
+ 
 
+ reports/ и /sbom для скрипта форматтер, что бы туда его подложить
 
 secgensbom (SBOM‑пайплайн)
 
@@ -223,6 +225,32 @@ docker run --rm -it \
   -e HOST_OUTPUT_DIR="${HOST_OUTPUT_DIR}" \
   secgensbom-tool:latest \
   /app/secgensbom/pipeline.sh
+
+
+mkdir -p project_inject
+mkdir -p secgensbom_out
+docker build --no-cache -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+PROJECT_SRC="/Users/you/projects/my-app"
+
+docker run --rm -it \
+  -v "${PROJECT_SRC}:/app/project_inject" \
+  -v "$(pwd)/reports:/app/reports" \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e PROJECT_DIR="/app/project_inject" \
+  -e HOST_PROJECT_DIR="${PROJECT_SRC}" \
+  -e OUTPUT_DIR="/app/secgensbom_out" \
+  secgensbom-tool:latest \
+  /app/secgensbom/pipeline.sh
+
+# Дедупликация
+docker run --rm -it \
+  -v "$(pwd)/secgensbom_out:/app/secgensbom_out" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e OUTPUT_DIR="/app/secgensbom_out" \
+  secgensbom-tool:latest \
+  /app/secgensbom/sbom_dedup.sh
 
 
 
@@ -393,3 +421,4 @@ Copyright (c) 2025 Elijah S Shmakov
 ![Logo](assets/logotype/logo.jpg)
 
 
+используется как пример https://github.com/karimtariqx/HackerStories/tree/main
