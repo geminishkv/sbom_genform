@@ -1,0 +1,44 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "sample-fullstack-app",
+      "version": "1.2.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "fastapi",
+      "version": "0.115.0",
+      "purl": "pkg:pypi/fastapi@0.115.0"
+    },
+    {
+      "type": "library",
+      "name": "uvicorn",
+      "version": "0.30.0",
+      "purl": "pkg:pypi/uvicorn@0.30.0"
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "18.2.0",
+      "purl": "pkg:npm/react@18.2.0"
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "18.2.0",
+      "purl": "pkg:npm/react-dom@18.2.0"
+    },
+    {
+      "type": "library",
+      "name": "axios",
+      "version": "1.7.2",
+      "purl": "pkg:npm/axios@1.7.2"
+    }
+  ]
+}

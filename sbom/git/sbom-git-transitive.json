@@ -1,0 +1,44 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "sample-transitive-app",
+      "version": "0.9.0"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:pypi/django@5.0.4",
+      "type": "library",
+      "name": "django",
+      "version": "5.0.4",
+      "purl": "pkg:pypi/django@5.0.4"
+    },
+    {
+      "bom-ref": "pkg:pypi/asgiref@3.8.1",
+      "type": "library",
+      "name": "asgiref",
+      "version": "3.8.1",
+      "purl": "pkg:pypi/asgiref@3.8.1"
+    },
+    {
+      "bom-ref": "pkg:pypi/sqlparse@0.5.0",
+      "type": "library",
+      "name": "sqlparse",
+      "version": "0.5.0",
+      "purl": "pkg:pypi/sqlparse@0.5.0"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:pypi/django@5.0.4",
+      "dependsOn": [
+        "pkg:pypi/asgiref@3.8.1",
+        "pkg:pypi/sqlparse@0.5.0"
+      ]
+    }
+  ]
+}

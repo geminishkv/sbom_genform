@@ -1,0 +1,44 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "container",
+      "name": "backend-multistage-image",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "python",
+      "version": "3.12.2-r0",
+      "purl": "pkg:apk/alpine/python@3.12.2-r0"
+    },
+    {
+      "type": "library",
+      "name": "openssl",
+      "version": "3.0.12-r0",
+      "purl": "pkg:apk/alpine/openssl@3.0.12-r0"
+    },
+    {
+      "type": "library",
+      "name": "libssl3",
+      "version": "3.0.12-r0",
+      "purl": "pkg:apk/alpine/libssl3@3.0.12-r0"
+    },
+    {
+      "type": "library",
+      "name": "curl",
+      "version": "8.7.1-r0",
+      "purl": "pkg:apk/alpine/curl@8.7.1-r0"
+    },
+    {
+      "type": "library",
+      "name": "ca-certificates-bundle",
+      "version": "20240226-r0",
+      "purl": "pkg:apk/alpine/ca-certificates-bundle@20240226-r0"
+    }
+  ]
+}

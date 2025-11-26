@@ -1,0 +1,32 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "container",
+      "name": "sample-backend-image",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "openssl",
+      "version": "1.1.1k-r0",
+      "purl": "pkg:apk/alpine/openssl@1.1.1k-r0"
+    },
+    {
+      "type": "library",
+      "name": "bash",
+      "version": "5.1.16-r0",
+      "purl": "pkg:apk/alpine/bash@5.1.16-r0"
+    },
+    {
+      "type": "library",
+      "name": "busybox",
+      "version": "1.34.1-r3",
+      "purl": "pkg:apk/alpine/busybox@1.34.1-r3"
+    }
+  ]
+}

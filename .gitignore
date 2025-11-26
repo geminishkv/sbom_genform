@@ -47,8 +47,8 @@ logs/
 *.xls
 reports/
 output/
-sbom/git/*
-sbom/images/*
+# sbom/git/*
+# sbom/images/*
 
 # Databases
 *.sqlite
@@ -67,7 +67,7 @@ sbom/images/*
 *.7z
 *.rar
 
-# Node.js!
+# Node.js
 node_modules/
 /node_modules
 dist/

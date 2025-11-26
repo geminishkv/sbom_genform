@@ -128,6 +128,78 @@ cdxgen -r рекурсивно сканирует директорию прое�
 	•	secgensbom_out/clair/* — отчёты Clair (если настроен).
 
 
+	•	cd secgensbom
+	•	chmod +x *.sh
+	2.	Запустить только генерацию SBOM (без сканов):
+	•	./sbom_generate.sh
+Что произойдёт:
+	•	cdxgen сгенерит SBOM по коду из script/ в файл:
+	•	secgensbom_out/app-bom-cdxgen.json 
+	•	Trivy сгенерит SBOM по образу (IMAGE_NAME из config.env, по умолчанию sbom-formatter:latest) в файл:
+	•	secgensbom_out/image-bom-trivy.json 
+Предварительно образ надо собрать, например:
+	•	docker build -t sbom-formatter:latest .
+Вариант B: напрямую, без пайплайна
+	1.	SBOM по коду из script/ через cdxgen:
+	•	cd script
+	•	cdxgen -r -o ../secgensbom_out/app-bom-cdxgen.json –spec-version 1.5
+	2.	SBOM по образу через Trivy:
+	•	docker build -t sbom-formatter:latest .
+	•	trivy image –format cyclonedx –output secgensbom_out/image-bom-trivy.json sbom-formatter:latest 
+Оба файла можно потом кормить твоему formatter.py или использовать для мерджа/подписи.
+2. Как подписать SBOM из терминала
+Подпись делает cdxgen, ему нужны ключи и переменные окружения. 
+	1.	Сгенерировать ключи (один раз, пример):
+	•	mkdir -p keys
+	•	openssl genrsa -out keys/sbom_sign_private.pem 4096
+	•	openssl rsa -in keys/sbom_sign_private.pem -pubout -out keys/sbom_sign_public.pem
+	2.	Убедиться, что в secgensbom/config.env пути совпадают:
+	•	SBOM_SIGN_PRIVATE_KEY=”${REPO_ROOT}/keys/sbom_sign_private.pem”
+	•	SBOM_SIGN_PUBLIC_KEY=”${REPO_ROOT}/keys/sbom_sign_public.pem”
+	3.	Подписать SBOM через sbom_merge_sign.sh (он заодно мерджит и дедуплицирует):
+	•	cd secgensbom
+	•	./sbom_merge_sign.sh
+Вход:
+	•	secgensbom_out/app-bom-cdxgen.json
+	•	secgensbom_out/image-bom-trivy.json
+Выход:
+	•	secgensbom_out/merged-bom-signed.json — общий подписанный SBOM (CycloneDX), после мерджа и дедуплицирования. 
+Если хочешь подписать какой-то отдельный SBOM вручную:
+	•	SBOM_SIGN_ALGORITHM=RS512  SBOM_SIGN_PRIVATE_KEY=keys/sbom_sign_private.pem  SBOM_SIGN_PUBLIC_KEY=keys/sbom_sign_public.pem  cdxgen –sign –spec-version 1.5 –input-bom secgensbom_out/app-bom-cdxgen.json –output secgensbom_out/app-bom-signed.json 
+Проверка подписи (опционально):
+	•	cdx-verify -i secgensbom_out/app-bom-signed.json –public-key keys/sbom_sign_public.pem 
+3. Как выполнить все скрипты (полный пайплайн)
+Полный цикл: генерация SBOM (код + образ) → мердж + дедуп + подпись → Dependency-Check → Trivy → Clair.
+	1.	Подготовка:
+	•	из корня: docker build -t sbom-formatter:latest .
+	•	убедись, что стоят: cdxgen, cyclonedx-cli, trivy, docker, (опционально) clairctl. 
+	•	в secgensbom/config.env IMAGE_NAME по умолчанию уже sbom-formatter:latest, PROJECT_DIR указывает на script/, REPO_ROOT вычисляется автоматически.
+	2.	Один раз:
+	•	cd secgensbom
+	•	chmod +x *.sh
+	3.	Запуск полного пайплайна:
+	•	./pipeline.sh
+Что сделает pipeline.sh:
+	•	вызовет sbom_generate.sh
+	•	создаст secgensbom_out/app-bom-cdxgen.json и secgensbom_out/image-bom-trivy.json.
+	•	вызовет sbom_merge_sign.sh
+	•	смерджит два SBOM, сделает дедуп, провалидирует и создаст secgensbom_out/merged-bom-signed.json (подписанный общий SBOM).
+	•	вызовет scan_dependency_check.sh
+	•	прогонит OWASP Dependency-Check по script/ в докере, отчёты положит в secgensbom_out/dependency-check/. 
+	•	вызовет scan_trivy.sh
+	•	просканирует образ sbom-formatter:latest и подписанный SBOM, отчёты в secgensbom_out/trivy/. 
+	•	вызовет scan_clair.sh (если есть clairctl)
+	•	просканирует образ через Clair, отчёты в secgensbom_out/clair/. 
+Ключевой артефакт, который ты дальше можешь брать как “единый источник правды” для formatter.py и внешних систем:
+	•	secgensbom_out/merged-bom-signed.json — общий подписанный SBOM с учётом дедуплификации.
+
+
+docker build -f Dockerfile.formatter -t sbom-formatter:latest .
+docker build -f Dockerfile.secgensbom -t secgensbom-tool:latest .
+
+rm sbom/git/.DS_Store
+find . -name ".DS_Store" -delete
+
 
 ***
 
