@@ -1,11 +1,12 @@
 FROM python:3.12-slim
 
-# 1. Базовые зависимости
+# 1. Базовые зависимости + docker-cli
 RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     git \
     jq \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Trivy
@@ -17,7 +18,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get update && apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Для linux‑контейнера на Apple Silicon убираем, из-за специфики работы MACOS, в ином варианте ОС используем
+# Для linux-контейнера на Apple Silicon убираем прямой бинарник CycloneDX CLI
 # 4. CycloneDX CLI
 # RUN curl -L https://github.com/CycloneDX/cyclonedx-cli/releases/latest/download/cyclonedx-linux-x64 \
 #     -o /usr/local/bin/cyclonedx && \
