@@ -88,6 +88,25 @@ deactivate
 
 
 
+
+cdxgen -r рекурсивно сканирует директорию проекта и генерирует CycloneDX SBOM (по умолчанию JSON). 
+	•	Для контейнера cdxgen  -t docker -o bom.json генерирует SBOM по установленному/локальному образу. 
+	•	OWASP Dependency-Check в Docker-режиме монтирует исходники и пишет отчёты в /report. 
+	•	Clair-часть сильно зависит от твоей конкретной установки (quay/clair, clairctl, интеграция в CI/CD), поэтому оставлена как условный блок.
+
+
+Пример для локальной разработки:
+	•	chmod +x generate_sbom_and_scan.sh
+	•	docker build -t myapp:latest .
+	•	PROJECT_DIR=$(pwd) IMAGE_NAME=myapp:latest ./generate_sbom_and_scan.sh
+После выполнения:
+	•	sbom_out/app-bom-cdxgen.json — SBOM по коду.
+	•	sbom_out/image-bom-cdxgen.json — SBOM по контейнеру.
+	•	sbom_out/dependency-check-report/* — HTML/XML/JSON отчёты Dependency-Check.
+	•	sbom_out/clair-*.json — отчёт Clair (если настроен).
+
+
+
 ***
 
 ### Сопроводительыне материалы
