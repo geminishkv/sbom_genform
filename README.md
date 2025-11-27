@@ -377,10 +377,14 @@ docker run --rm -it \
   secgensbom-tool:latest \
   /app/secgensbom/sbom_dedup.sh
 
+# Очистка кеша hard
+
+docker builder prune -af
+docker system prune -af
 
 
-# Для сборки на сейчас без Clair
-# Если clairctl недоступен, шаг логируется как “ошибка, пропущен”
+
+# Для сборки без Clair - clairctl недоступен, шаг логируется как “ошибка, пропущен”
 
 mkdir -p project_inject
 mkdir -p secgensbom_out
@@ -434,6 +438,24 @@ docker run --rm -it \
   sbom-formatter:latest \
   python /app/script/formatter.py
 
+# manual_formatter
+
+docker run --rm -it \
+  -v "$(pwd)/script:/app/script" \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  sbom-formatter:latest \
+  python /app/script/manual_formatter.py
+
+# без Docker
+
+docker run --rm -it \
+  -v "$(pwd)/script:/app/script" \
+  -v "$(pwd)/sbom:/app/sbom" \
+  -v "$(pwd)/reports:/app/reports" \
+  -w /app/script \
+  python:3.12-slim \
+  bash -lc "pip install -r requirements.txt && python manual_formatter.py"
 
 
 
