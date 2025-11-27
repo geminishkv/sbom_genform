@@ -44,7 +44,7 @@
 * Отчёты по уязвимостям:
     * `secgensbom_out/dependency-check/*`
     * `secgensbom_out/trivy/*`
-    * `secgensbom_out/clair/*
+    * `secgensbom_out/clair/*`
 * Конвертированные отчёты:
     * по результатам пайплайна: `secgensbom_reports/excel|odt/*.xlsx|*.odt`
     * по демо-SBOM: `reports/git/...`, `reports/images/...`
@@ -396,14 +396,7 @@ find . -name ".DS_Store" -delete
 ### Интеграция с CI/CD
 
 ```yaml
-sbom_processing:
-  stage: post-processing
-  script:
-    - pip install -r requirements.txt
-    - python main.py
-  artifacts:
-    paths:
-      - reports/
+
 ```
 
 ***
