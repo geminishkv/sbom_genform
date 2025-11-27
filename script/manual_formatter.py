@@ -38,16 +38,18 @@ def process_sboms(sbom_dir, report_dir):
         exporter.exportToOdt(odt_name)
 
 if __name__ == "__main__":
-    logging.info("Старт обработки SBOM файлов для secgensbom_out")
+    logging.info("Старт ручной обработки SBOM файлов (sbom/)")
 
     base_dir = Path(__file__).resolve().parent
-    sbom_dir = str(base_dir.parent / "secgensbom_out")
-    report_dir = str(base_dir.parent / "secgensbom_reports")
 
-    # создаём каталоги secgensbom_reports/excel и odt при необходимости
-    Path(report_dir, "excel").mkdir(parents=True, exist_ok=True)
-    Path(report_dir, "odt").mkdir(parents=True, exist_ok=True)
+    # demo git SBOM -> reports/git
+    process_sboms(str(base_dir.parent / "sbom" / "git"),
+                  str(base_dir.parent / "reports" / "git"))
 
-    process_sboms(sbom_dir, report_dir)
+    logging.info("Переходим к images")
 
-    logging.info("Обработка secgensbom_out завершена")
+    # demo images SBOM -> reports/images
+    process_sboms(str(base_dir.parent / "sbom" / "images"),
+                  str(base_dir.parent / "reports" / "images"))
+
+    logging.info("Ручная обработка sbom/ завершена")
