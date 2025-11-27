@@ -4,7 +4,9 @@
 <a href="https://daringfireball.net/projects/markdown"><img src="https://img.shields.io/static/v1?logo=markdown&logoColor=fff&label=&message=Markdown&color=36393f&style=flat" alt="Markdown"></a> 
 <a href="https://symbl.cc/en/unicode-table"><img src="https://img.shields.io/static/v1?logo=unicode&logoColor=fff&label=&message=Unicode&color=36393f&style=flat" alt="Unicode"></a> 
 <a href="https://shields.io"><img src="https://img.shields.io/static/v1?logo=shieldsdotio&logoColor=fff&label=&message=Shields&color=36393f&style=flat" alt="Shields"></a>
-<img src="https://img.shields.io/badge/Contributor-Шмаков_И._С.-8b9aff" alt="Contributor Badge"></a>
+<img src="https://img.shields.io/badge/Contributor-Шмаков_И._С.-8b9aff" alt="Contributor Badge"></a></div>
+
+<div align="center">
 <img src="https://img.shields.io/github/repo-size/geminishkv/sbom_genform" alt="repo size"></a>
 <img src="https://img.shields.io/github/last-commit/geminishkv/sbom_genform" alt="repo size"></a>
 <img src="https://img.shields.io/github/commit-activity/m/geminishkv/sbom_genform" alt="repo size"></a>
