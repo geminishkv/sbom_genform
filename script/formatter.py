@@ -15,7 +15,6 @@ SBOM Formatter - Форматировщик SBOM файлов
 Версия: 1.0.0
 """
 
-import os
 import sys
 import logging
 import argparse
@@ -30,7 +29,6 @@ from constants import (
     COMPONENT_TYPE_LIBRARY,
     LOG_FORMAT,
     LOG_FILE,
-    JSON_EXTENSION,
     EXCEL_EXTENSION,
     ODT_EXTENSION,
     EXCEL_DIR,
@@ -148,9 +146,9 @@ class SbomFormatter:
                     dependency = Dependency(
                         name=component["name"],
                         version=component["version"],
-                        srcLangs=[],
+                        dep_type=[],
                         purl=component.get("purl"),
-                        source=sbom_path
+                        path_to_sbom=sbom_path
                     )
                     dependencies.append(dependency)
                 except KeyError as e:
@@ -226,42 +224,6 @@ class SbomFormatter:
         
         logging.info(f"Обработка завершена. Успешно: {processed_count}, с ошибками: {error_count}")
 
-
-def process_sboms(sbom_dir: str, report_dir: str) -> None:
-    """
-    Обработка SBOM файлов (устаревшая функция для обратной совместимости).
-    
-    Args:
-        sbom_dir: Путь к директории с SBOM файлами
-        report_dir: Путь к директории для отчетов
-        
-    Note:
-        Эта функция устарела и оставлена для обратной совместимости.
-        Рекомендуется использовать класс SbomFormatter.
-    """
-    logging.warning("Функция process_sboms устарела. Используйте класс SbomFormatter.")
-    config = FormatterConfig(sbom_dir, report_dir)
-    formatter = SbomFormatter(config)
-    formatter.process_all_sboms()
-    handler = SbomHandler(sbom_dir)
-    for sbom_path in handler.sbomsList:
-        sbom_content = handler.readJson(sbom_path)
-        if sbom_content is None:
-            continue
-
-        base = os.path.basename(sbom_path).replace(".json", "")
-        excel_name = f"{report_dir}/excel/{base}.xlsx"
-        odt_name = f"{report_dir}/odt/{base}.odt"
-
-        all_dependencies = [
-            Dependency(c["name"], c["version"], [], c.get("purl"), sbom_path)
-            for c in sbom_content.get("components", [])
-            if c.get("type") == "library"
-        ]
-
-        exporter = Exporter(all_dependencies)
-        exporter.exportToExcel(excel_name)
-        exporter.exportToOdt(odt_name)
 
 def parse_arguments() -> argparse.Namespace:
     """

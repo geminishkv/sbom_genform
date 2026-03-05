@@ -8,10 +8,12 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \ # Trivy
+# Trivy
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
     | sh -s -- -b /usr/local/bin
 
-ENV DC_VERSION=10.0.4 # Dependency-Check (CLI)
+# Dependency-Check (CLI)
+ENV DC_VERSION=10.0.4
 RUN mkdir -p /opt && \
     curl -L "https://github.com/jeremylong/DependencyCheck/releases/download/v${DC_VERSION}/dependency-check-${DC_VERSION}-release.zip" \
     -o /tmp/dc.zip && \
@@ -21,7 +23,8 @@ RUN mkdir -p /opt && \
     ln -s /opt/dependency-check-${DC_VERSION}/bin/dependency-check.sh /usr/local/bin/dependency-check && \
     rm -rf /var/lib/apt/lists/* /tmp/dc.zip
 
-RUN curl -L "https://github.com/quay/clair/releases/latest/download/clairctl-linux-amd64" \ # Clairctl
+# Clairctl
+RUN curl -L "https://github.com/quay/clair/releases/latest/download/clairctl-linux-amd64" \
     -o /usr/local/bin/clairctl || true && \
     chmod +x /usr/local/bin/clairctl || true
 
@@ -30,7 +33,8 @@ WORKDIR /workspace
 ENV DEP_CHECK_DATA=/workspace/.dependency-check-data
 RUN mkdir -p "${DEP_CHECK_DATA}"
 
-COPY secgensbom/sca_entrypoint.sh /usr/local/bin/sca_entrypoint.sh # SCA
+# SCA entrypoint
+COPY secgensbom/sca_entrypoint.sh /usr/local/bin/sca_entrypoint.sh
 RUN chmod +x /usr/local/bin/sca_entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/sca_entrypoint.sh"]

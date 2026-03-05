@@ -75,7 +75,10 @@ class Exporter:
                     self.columns[1]: getattr(c, 'name', ''),
                     self.columns[2]: getattr(c, 'version', ''),
                     self.columns[3]: ", ".join(getattr(c, 'src_langs', getattr(c, 'srcLangs', [])) or []),
-                    self.columns[4]: ", ".join(getattr(c, 'dep_type', getattr(c, 'depType', [])) or []),
+                    self.columns[4]: ", ".join(
+                        str(x) if not isinstance(x, dict) else f"{x.get('name', '')}={x.get('value', '')}"
+                        for x in (getattr(c, 'dep_type', getattr(c, 'depType', [])) or [])
+                    ),
                     self.columns[5]: getattr(c, 'source', getattr(c, 'purl', '')),
                 }
                 for i, c in enumerate(self.externalDepsList)
@@ -126,7 +129,10 @@ class Exporter:
                 name = getattr(c, 'name', '')
                 version = getattr(c, 'version', '')
                 langs = ", ".join(getattr(c, 'src_langs', getattr(c, 'srcLangs', [])) or [])
-                dep_type = ", ".join(getattr(c, 'dep_type', getattr(c, 'depType', [])) or [])
+                dep_type = ", ".join(
+                    str(x) if not isinstance(x, dict) else f"{x.get('name', '')}={x.get('value', '')}"
+                    for x in (getattr(c, 'dep_type', getattr(c, 'depType', [])) or [])
+                )
                 source = getattr(c, 'source', getattr(c, 'purl', ''))
                 rowData = [i, name, version, langs, dep_type, source]
                 for cellValue in rowData:

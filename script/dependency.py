@@ -50,7 +50,7 @@ class PackageProcessorFactory:
         return None
 
 class Dependency:
-    def __init__(self, name: str, version: str, dep_type: list, purl: str, path_to_sbom: str):
+    def __init__(self, name: str, version: str, dep_type: list, purl: Optional[str], path_to_sbom: str):
         self.name = name
         self.version = version
         self.dep_type = dep_type

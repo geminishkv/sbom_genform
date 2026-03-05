@@ -9,7 +9,6 @@ Usage:
 """
 
 import sys
-import os
 import argparse
 import logging
 from pathlib import Path
@@ -49,16 +48,6 @@ KNOWN_DEP_FILES = [
 ]
 
 
-def find_sbom_files(target_dir: Path) -> list:
-    """Recursively find SBOM JSON files inside the target directory."""
-    sbom_files = []
-    for root, _dirs, files in os.walk(target_dir):
-        for f in files:
-            if f.endswith(".json") and "sbom" in f.lower():
-                sbom_files.append(os.path.join(root, f))
-    return sbom_files
-
-
 def find_dep_file(target_dir: Path) -> str | None:
     """Return the first known dependency file found in the target directory."""
     for name in KNOWN_DEP_FILES:
@@ -78,8 +67,8 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="./report",
-        help="Директория для сохранения отчётов (по умолчанию: ./report)",
+        default="./reports",
+        help="Директория для сохранения отчётов (по умолчанию: ./reports)",
     )
     parser.add_argument(
         "--sign",

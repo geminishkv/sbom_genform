@@ -8,7 +8,6 @@ from exporter import Exporter
 from dotenv import load_dotenv
 from dependency import Dependency
 from constants import EXCEL_DIR, ODT_DIR
-from setup_secgensbom_env import main as setup_env_main
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -17,7 +16,6 @@ logging.basicConfig(
 )
 load_dotenv()
 
-DepsMemory = []
 
 def process_sboms(sbom_dir, report_dir, src_langs=None, signer_opts=None):
     handler = SbomHandler(sbom_dir)
@@ -64,7 +62,7 @@ def detect_langs_from_deps(deps_file: str) -> list:
     This is a lightweight heuristic and does not parse the file deeply.
     """
     base = os.path.basename(deps_file).lower()
-    if base == 'requirements.txt' or base.endswith('.pyproject') or base.endswith('poetry.lock'):
+    if base == 'requirements.txt' or base == 'pyproject.toml' or base.endswith('poetry.lock'):
         return ['Python']
     if base == 'package.json' or base == 'package-lock.json' or base == 'pnpm-lock.yaml' or base == 'yarn.lock':
         return ['JavaScript', 'Node.js']
@@ -98,6 +96,7 @@ if __name__ == "__main__":
     if args.setup_env:
         logging.info("Настройка служебных директорий SecGenSBOM...")
         try:
+            from setup_secgensbom_env import main as setup_env_main
             setup_env_main()
         except Exception as e:
             logging.exception(f"Ошибка при настройке окружения SecGenSBOM: {e}")
