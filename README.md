@@ -365,6 +365,29 @@ $ docker run --rm -it \
   python /app/script/manual_formatter.py
 ```
 
+* run_report.py — CLI-обёртка для быстрой генерации отчётов по проекту
+
+```bash
+# Базовый запуск: указать директорию проекта с SBOM-файлами
+$ python script/run_report.py /path/to/project
+
+# Указать директорию для сохранения отчётов (по умолчанию ./report)
+$ python script/run_report.py /path/to/project --output ./my_reports
+
+# С подписью SBOM (RSA)
+$ python script/run_report.py /path/to/project --output ./report \
+  --sign --private-key key.pem --public-key pub.pem --pass secret
+```
+
+| Аргумент | Обязательный | Описание |
+|---|---|---|
+| `target` | да | Путь к директории проекта (содержит SBOM-файлы) |
+| `--output` | нет | Директория для отчётов (по умолчанию `./report`) |
+| `--sign` | нет | Включить подпись SBOM (RSA) |
+| `--private-key` | нет | Путь к приватному ключу PEM |
+| `--public-key` | нет | Путь к публичному ключу PEM |
+| `--pass` | нет | Пароль для приватного ключа |
+
 * Очистка кеша hard
 
 ```bash
