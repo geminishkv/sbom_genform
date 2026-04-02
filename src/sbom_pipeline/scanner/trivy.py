@@ -82,6 +82,11 @@ def _parse(result_file: Path, scanner: str) -> List[VulnFinding]:
     for result_block in data.get("Results", []):
         for vuln in result_block.get("Vulnerabilities") or []:
             cvss_score = _extract_cvss(vuln.get("CVSS", {}))
+            fixed = vuln.get("FixedVersion", "")
+            recommendation = (
+                vuln.get("PrimaryURL", "")
+                or (f"Обновить до версии {fixed}" if fixed else "")
+            )
             findings.append(
                 VulnFinding(
                     cve_id=vuln.get("VulnerabilityID", ""),
@@ -92,7 +97,9 @@ def _parse(result_file: Path, scanner: str) -> List[VulnFinding]:
                     severity=vuln.get("Severity", "UNKNOWN"),
                     description=vuln.get("Title") or vuln.get("Description", ""),
                     scanner=scanner,
-                    fixed_version=vuln.get("FixedVersion", ""),
+                    fixed_version=fixed,
+                    recommendation=recommendation,
+                    acceptability_status=vuln.get("Status", ""),
                 )
             )
 

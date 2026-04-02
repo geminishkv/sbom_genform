@@ -210,6 +210,15 @@ def _export_reports(
 def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependency]:
     """Извлечь зависимости типа 'library' из SBOM."""
     deps: List[Dependency] = []
+
+    # Container image from SBOM metadata
+    metadata_comp = sbom.get("metadata", {}).get("component", {})
+    container_image = (
+        metadata_comp.get("name", "")
+        if metadata_comp.get("type") == "container"
+        else ""
+    )
+
     for comp in sbom.get("components", []):
         if comp.get("type") != COMPONENT_TYPE_LIBRARY:
             continue
@@ -225,7 +234,49 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
                 purl=comp.get("purl") or "",
                 pathToSbom=sbom_path,
             )
+
+            # Package type from PURL ecosystem (e.g. maven, pypi, npm)
+            dep.package_type = _purl_type(comp.get("purl") or "")
+
+            # Attack surface / security function from CycloneDX component properties
+            props = {
+                p.get("name", ""): p.get("value", "")
+                for p in (comp.get("properties") or [])
+                if isinstance(p, dict)
+            }
+            dep.attack_surface = _find_prop(
+                props,
+                ("attack-surface", "attack_surface", "attackSurface", "isAttackSurface"),
+            )
+            dep.security_function = _find_prop(
+                props,
+                ("security-function", "security_function", "securityFunction", "isSecurityFunction"),
+            )
+
+            # Container fields
+            dep.container_image = container_image
+            dep.container_role = _find_prop(
+                props,
+                ("container-role", "container_role", "containerRole", "cdx:docker:layer", "layer"),
+            )
+
             deps.append(dep)
         except Exception as e:
             logging.warning(f"[pipeline] Пропущен компонент: {e}")
     return deps
+
+
+def _purl_type(purl: str) -> str:
+    """Extract ecosystem type from a PURL string (pkg:<type>/...)."""
+    if purl.startswith("pkg:"):
+        segment = purl[4:].split("/")[0].split("@")[0].split("?")[0]
+        return segment
+    return ""
+
+
+def _find_prop(props: Dict[str, str], keys: tuple) -> str:
+    """Return value of the first matching key from a properties dict."""
+    for key in keys:
+        if key in props:
+            return props[key]
+    return ""

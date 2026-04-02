@@ -25,7 +25,9 @@ class VulnFinding:
     description: str
     scanner: str           # trivy | clair | dependency-check
     fixed_version: str = ""
-    bdu_id: Optional[str] = None  # Внутренний ID от BDU, если есть
+    bdu_id: Optional[str] = None       # Внутренний ID от BDU, если есть
+    recommendation: str = ""           # Рекомендация / компенсирующая мера
+    acceptability_status: str = ""     # Статус допустимости в рассматриваемой конфигурации
 
     @property
     def severity_upper(self) -> str:

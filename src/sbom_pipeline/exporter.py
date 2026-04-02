@@ -28,8 +28,13 @@ _COMP_COLUMNS = [
     "№ п/п",
     "Наименование компонента",
     "Версия компонента",
+    "Тип пакета / тип компонента",
+    "PURL / технический идентификатор компонента",
     "Язык (языки)",
-    "Принадлежность к поверхности атаки / функциям безопасности",
+    "Признак принадлежности к поверхности атаки",
+    "Признак выполнения функций безопасности",
+    "Принадлежность к контейнерному образу",
+    "Роль компонента в составе контейнерного образа",
     "Адрес веб-ресурса",
 ]
 
@@ -43,6 +48,8 @@ _VULN_COLUMNS = [
     "Описание",
     "Сканер",
     "Исправлено в версии",
+    "Рекомендация / компенсирующая мера",
+    "Статус допустимости в рассматриваемой конфигурации",
 ]
 _BDU_VULN_COLUMN = "BDU / ID"
 _SEVERITY_COLUMN = "Критичность"
@@ -202,17 +209,27 @@ class Exporter:
     def _comp_rows(self) -> List[Dict[str, Any]]:
         rows = []
         for i, dep in enumerate(self.deps, start=1):
+            dep_types: list = getattr(dep, "dep_type", None) or getattr(dep, "depType", []) or []
+            attack_surface = ", ".join(
+                t for t in dep_types if "attack" in t.lower() or "поверхность" in t.lower()
+            ) or getattr(dep, "attack_surface", "")
+            security_func = ", ".join(
+                t for t in dep_types if "security" in t.lower() or "безопасност" in t.lower()
+            ) or getattr(dep, "security_function", "")
             rows.append({
                 _COMP_COLUMNS[0]: i,
                 _COMP_COLUMNS[1]: getattr(dep, "name", ""),
                 _COMP_COLUMNS[2]: getattr(dep, "version", ""),
-                _COMP_COLUMNS[3]: ", ".join(
+                _COMP_COLUMNS[3]: getattr(dep, "package_type", "") or getattr(dep, "component_type", ""),
+                _COMP_COLUMNS[4]: getattr(dep, "purl", ""),
+                _COMP_COLUMNS[5]: ", ".join(
                     getattr(dep, "src_langs", None) or getattr(dep, "srcLangs", []) or []
                 ),
-                _COMP_COLUMNS[4]: ", ".join(
-                    getattr(dep, "dep_type", None) or getattr(dep, "depType", []) or []
-                ),
-                _COMP_COLUMNS[5]: getattr(dep, "source", None) or getattr(dep, "purl", ""),
+                _COMP_COLUMNS[6]: attack_surface,
+                _COMP_COLUMNS[7]: security_func,
+                _COMP_COLUMNS[8]: getattr(dep, "container_image", ""),
+                _COMP_COLUMNS[9]: getattr(dep, "container_role", ""),
+                _COMP_COLUMNS[10]: getattr(dep, "source", None) or "",
             })
         return rows
 
@@ -234,6 +251,8 @@ class Exporter:
                 _VULN_COLUMNS[5]: v.description[:200] if v.description else "",
                 _VULN_COLUMNS[6]: v.scanner,
                 _VULN_COLUMNS[7]: v.fixed_version,
+                _VULN_COLUMNS[8]: getattr(v, "recommendation", ""),
+                _VULN_COLUMNS[9]: getattr(v, "acceptability_status", ""),
             }
             if self.include_bdu:
                 items = list(row.items())

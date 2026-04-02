@@ -80,6 +80,11 @@ def _parse(result_file: Path) -> List[VulnFinding]:
 
         for vuln in dep.get("vulnerabilities") or []:
             cvss_score = _extract_cvss(vuln)
+            refs: list = vuln.get("references") or []
+            recommendation = (
+                vuln.get("notes", "")
+                or next((r.get("url", "") for r in refs if r.get("url")), "")
+            )
             findings.append(
                 VulnFinding(
                     cve_id=vuln.get("name", ""),
@@ -91,6 +96,7 @@ def _parse(result_file: Path) -> List[VulnFinding]:
                     description=vuln.get("description", ""),
                     scanner="dependency-check",
                     fixed_version="",
+                    recommendation=recommendation,
                 )
             )
 

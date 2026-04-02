@@ -81,6 +81,8 @@ def _parse(result_file: Path) -> List[VulnFinding]:
     for vuln_id, vuln_data in (data.get("vulnerabilities") or {}).items():
         pkg = vuln_data.get("Package") or {}
         raw_sev = vuln_data.get("NormalizedSeverity", "Unknown")
+        links: list = vuln_data.get("Links") or []
+        recommendation = links[0] if links else ""
         findings.append(
             VulnFinding(
                 cve_id=vuln_id,
@@ -92,6 +94,7 @@ def _parse(result_file: Path) -> List[VulnFinding]:
                 description=vuln_data.get("Description", ""),
                 scanner="clair",
                 fixed_version=vuln_data.get("FixedInVersion", ""),
+                recommendation=recommendation,
             )
         )
 

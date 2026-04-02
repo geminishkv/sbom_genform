@@ -10,6 +10,16 @@
 
 ### Добавлено
 
+- **Новые колонки отчёта «Компоненты»**:
+  - `Тип пакета / тип компонента` — тип экосистемы из PURL (например, `pypi`, `maven`, `npm`, `apk`)
+  - `PURL / технический идентификатор компонента` — полный PURL компонента
+  - `Признак принадлежности к поверхности атаки` — из свойства компонента CycloneDX (`attack-surface`, `attackSurface`, `isAttackSurface`)
+  - `Признак выполнения функций безопасности` — из свойства компонента CycloneDX (`security-function`, `securityFunction`, `isSecurityFunction`)
+  - `Принадлежность к контейнерному образу` — имя образа из `metadata.component` SBOM (только для контейнерного сценария)
+  - `Роль компонента в составе контейнерного образа` — из свойства компонента (`container-role`, `containerRole`, `cdx:docker:layer`, `layer`)
+- **Новые колонки отчёта «Уязвимости»**:
+  - `Рекомендация / компенсирующая мера` — заполняется из `PrimaryURL` (Trivy), `Links[0]` (Clair), `notes` / `references[].url` (Dependency-Check); автоматически формируется «Обновить до версии X» при наличии `FixedVersion`
+  - `Статус допустимости в рассматриваемой конфигурации` — из поля `Status` отчёта Trivy (`fixed`, `affected`, `will_not_fix`, `end_of_life` и др.)
 - Опциональное BDU-обогащение уязвимостей через `--bdu` и переменную окружения `BDU`
 - Выгрузка `BDU / ID` в Excel, Word и ODT отчёты
 - BDU ID в CycloneDX SBOM теперь сохраняется в `vulnerabilities[].properties[]` как `ru.fstec.bdu:id`
@@ -31,6 +41,12 @@
 
 - Trivy SBOM-сканирование теперь использует `app-bom-dedup-signed.json` вместо `app-bom-dedup.json`
 - README: обновлена таблица артефактов и диаграмма Mermaid
+- `pipeline._extract_dependencies()` обогащает объекты `Dependency` атрибутами `package_type`, `attack_surface`, `security_function`, `container_image`, `container_role` на основе данных SBOM
+- `scanner/trivy.py`, `scanner/clair.py`, `scanner/depcheck.py` — парсеры заполняют `recommendation` и `acceptability_status` из соответствующих полей каждого сканера
+- Разделена объединённая колонка «Принадлежность к поверхности атаки / функциям безопасности» на два отдельных поля
+- Поля `recommendation` и `acceptability_status` добавлены в датакласс `VulnFinding`
+- Вспомогательные функции `_purl_type()` и `_find_prop()` в `pipeline.py`
+- Тесты `tests/test_new_columns.py` (77 cases): покрывают новые поля во всех сканерах, `_extract_dependencies()`, `Exporter._comp_rows()` / `_vuln_rows()` и Excel-экспорт
 
 ---
 
