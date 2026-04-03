@@ -223,6 +223,11 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
         if comp.get("type") != COMPONENT_TYPE_LIBRARY:
             continue
         try:
+            props = {
+                p.get("name", ""): p.get("value", "")
+                for p in (comp.get("properties") or [])
+                if isinstance(p, dict)
+            }
             dep = Dependency(
                 name=comp.get("name", ""),
                 version=comp.get("version", ""),
@@ -233,33 +238,21 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
                 ),
                 purl=comp.get("purl") or "",
                 pathToSbom=sbom_path,
+                package_type=_purl_type(comp.get("purl") or ""),
+                attack_surface=_find_prop(
+                    props,
+                    ("attack-surface", "attack_surface", "attackSurface", "isAttackSurface"),
+                ),
+                security_function=_find_prop(
+                    props,
+                    ("security-function", "security_function", "securityFunction", "isSecurityFunction"),
+                ),
+                container_image=container_image,
+                container_role=_find_prop(
+                    props,
+                    ("container-role", "container_role", "containerRole", "cdx:docker:layer", "layer"),
+                ),
             )
-
-            # Package type from PURL ecosystem (e.g. maven, pypi, npm)
-            dep.package_type = _purl_type(comp.get("purl") or "")
-
-            # Attack surface / security function from CycloneDX component properties
-            props = {
-                p.get("name", ""): p.get("value", "")
-                for p in (comp.get("properties") or [])
-                if isinstance(p, dict)
-            }
-            dep.attack_surface = _find_prop(
-                props,
-                ("attack-surface", "attack_surface", "attackSurface", "isAttackSurface"),
-            )
-            dep.security_function = _find_prop(
-                props,
-                ("security-function", "security_function", "securityFunction", "isSecurityFunction"),
-            )
-
-            # Container fields
-            dep.container_image = container_image
-            dep.container_role = _find_prop(
-                props,
-                ("container-role", "container_role", "containerRole", "cdx:docker:layer", "layer"),
-            )
-
             deps.append(dep)
         except Exception as e:
             logging.warning(f"[pipeline] Пропущен компонент: {e}")
