@@ -31,11 +31,12 @@
 **Что делает:**
 
 - Генерирует SBOM из локальной директории или Git-репозитория (GitHub / GitLab)
+- Дедуплицирует компоненты по PURL и уязвимости по CVE+компонент
+- Создаёт **два подписанных SBOM**: без уязвимостей и с ними
 - Сканирует уязвимости через **Trivy**, **OWASP Dependency-Check**, **Clair**
 - Встраивает найденные уязвимости в SBOM (CycloneDX 1.5)
 - Опционально обогащает уязвимости идентификаторами **БДУ ФСТЭК**
 - Экспортирует читаемые отчёты: **Excel (.xlsx)**, **Word (.docx)**, **ODT (.odt)**
-- Подписывает итоговый SBOM (SHA-256)
 
 ***
 
@@ -81,14 +82,16 @@ pip install -e ".[dev]"
 
 ### SBOM JSON
 
-| Файл                                    | Описание                        |
-| --------------------------------------- | ------------------------------- |
-| `secgensbom_out/app-bom-cdxgen.json`    | Исходный SBOM                   |
-| `secgensbom_out/app-bom-dedup.json`     | После дедупликации              |
-| `secgensbom_out/merged-bom-signed.json` | Подписанный SBOM с уязвимостями |
-| `secgensbom_out/report_name(cert)`      | Отчет с добавлением полей GOST  |
-| `secgensbom_out/merged-bom-signed.sig`  | SHA-256 контрольная сумма       |
-| `secgensbom_out/vulns-normalized.json`  | Нормализованные уязвимости      |
+| Файл                                              | Описание                                   |
+| ------------------------------------------------- | ------------------------------------------ |
+| `secgensbom_out/app-bom-cdxgen.json`              | Исходный SBOM                              |
+| `secgensbom_out/app-bom-dedup.json`               | После дедупликации компонентов             |
+| `secgensbom_out/app-bom-dedup-signed.json`        | Подписанный SBOM **без** уязвимостей       |
+| `secgensbom_out/app-bom-dedup-signed.sig`         | SHA-256 контрольная сумма (без уязв.)      |
+| `secgensbom_out/merged-bom-signed.json`           | Подписанный SBOM **с** уязвимостями        |
+| `secgensbom_out/report_name(cert)`                | Отчет с добавлением полей GOST  |
+| `secgensbom_out/merged-bom-signed.sig`            | SHA-256 контрольная сумма (с уязв.)        |
+| `secgensbom_out/vulns-normalized.json`            | Нормализованные уязвимости                 |
 
 Если включено BDU-обогащение, в `merged-bom-signed.json` идентификатор БДУ записывается в `vulnerabilities[].properties[]` как свойство с именем `ru.fstec.bdu:id`.
 
@@ -238,9 +241,9 @@ flowchart TD
 
     subgraph pipeline["secsbom run — этапы"]
         GEN["1 · generate.py\napp-bom-cdxgen.json"]
-        GEN --> DEDUP["2 · dedup.py\napp-bom-dedup.json\nдедупликация по PURL"]
-        DEDUP --> SIGN["3 · sign.py\nmerged-bom-signed.json + .sig\nSHA-256 в metadata.signature"]
-        SIGN --> SCAN
+        GEN --> DEDUP["2 · dedup.py\napp-bom-dedup.json\nдедупликация компонентов по PURL"]
+        DEDUP --> SIGN1["3 · sign.py\napp-bom-dedup-signed.json + .sig\nSHA-256 — SBOM без уязвимостей"]
+        SIGN1 --> SCAN
 
         subgraph SCAN["4 · scanner/"]
             direction LR
@@ -249,8 +252,10 @@ flowchart TD
             CLAIR["clair.py\nclair-*.json\n(если --clair)"]
         end
 
-        TRIVY & DEPCHECK & CLAIR --> MERGE["5 · vuln_merger.py\nvulnerabilities&#91;&#93; в SBOM"]
-        MERGE --> EXPORT["6 · exporter.py"]
+        TRIVY & DEPCHECK & CLAIR --> DDUP2["5 · dedup.py\nдедупликация уязвимостей\nпо CVE + компонент"]
+        DDUP2 --> MERGE["6 · vuln_merger.py\nvulnerabilities&#91;&#93; в SBOM"]
+        MERGE --> SIGN2["7 · sign.py\nmerged-bom-signed.json + .sig\nSHA-256 — SBOM с уязвимостями"]
+        SIGN2 --> EXPORT["8 · exporter.py"]
     end
 
     EXPORT --> XLSX["secgensbom_reports/\n*.xlsx"]

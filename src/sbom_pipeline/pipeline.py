@@ -2,12 +2,14 @@
 Оркестратор SBOM-пайплайна.
 
 Шаги:
-  1. Генерация SBOM   (generate.py)
-  2. Дедупликация     (dedup.py)
-  3. Подпись SHA-256  (sign.py)
-  4. Сканирование     (scanner/trivy, clair, depcheck)
-  5. Слияние уязв.    (vuln_merger.py)
-  6. Экспорт отчётов  (exporter.py)
+  1. Генерация SBOM             (generate.py)
+  2. Дедупликация компонентов   (dedup.py)
+  3. Подпись компонентов        (sign.py)  → app-bom-dedup-signed.json
+  4. Сканирование уязвимостей   (scanner/trivy, clair, depcheck)
+  5. Дедупликация уязвимостей   (dedup.py)
+  6. Слияние уязв. в SBOM       (vuln_merger.py)
+  7. Подпись с уязвимостями     (sign.py)  → merged-bom-signed.json
+  8. Экспорт отчётов            (exporter.py)
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from .config import PipelineConfig
 from .constants import (
     APP_BOM_FILE,
     DEDUP_BOM_FILE,
+    SIGNED_DEDUP_BOM_FILE,
     SIGNED_BOM_FILE,
     EXCEL_DIR,
     ODT_DIR,
@@ -64,16 +67,16 @@ def run(cfg: PipelineConfig) -> None:
         generate.generate_from_dir(cfg.project_dir, app_bom)
 
     # ------------------------------------------------------------------
-    # 2. Дедупликация
+    # 2. Дедупликация компонентов
     # ------------------------------------------------------------------
     dedup_bom = cfg.output_dir / DEDUP_BOM_FILE
     dedup.dedup_sbom(app_bom, dedup_bom)
 
     # ------------------------------------------------------------------
-    # 3. Подпись SHA-256
+    # 3. Подпись SBOM без уязвимостей (SHA-256)
     # ------------------------------------------------------------------
-    signed_bom = cfg.output_dir / SIGNED_BOM_FILE
-    sign.sign_sbom(dedup_bom, signed_bom)
+    signed_dedup_bom = cfg.output_dir / SIGNED_DEDUP_BOM_FILE
+    sign.sign_sbom(dedup_bom, signed_dedup_bom)
 
     # ------------------------------------------------------------------
     # 4. Сканирование уязвимостей
@@ -85,9 +88,9 @@ def run(cfg: PipelineConfig) -> None:
         project_dir=cfg.project_dir,
         output_dir=cfg.trivy_dir,
     )
-    # Trivy — по SBOM
+    # Trivy — по SBOM (используем подписанный SBOM без уязвимостей)
     all_findings += trivy.scan_sbom(
-        sbom_path=signed_bom,
+        sbom_path=signed_dedup_bom,
         output_dir=cfg.trivy_dir,
     )
     # Dependency-Check
@@ -109,9 +112,14 @@ def run(cfg: PipelineConfig) -> None:
     logging.info(f"[pipeline] Всего уязвимостей из всех сканеров: {len(all_findings)}")
 
     # ------------------------------------------------------------------
-    # 5. Слияние уязвимостей в SBOM
+    # 5. Дедупликация уязвимостей
     # ------------------------------------------------------------------
-    with open(signed_bom, encoding="utf-8") as f:
+    all_findings = dedup.dedup_vulns(all_findings)
+
+    # ------------------------------------------------------------------
+    # 6. Слияние уязвимостей в SBOM
+    # ------------------------------------------------------------------
+    with open(dedup_bom, encoding="utf-8") as f:
         sbom_data: Dict[str, Any] = json.load(f)
 
     if all_findings:
@@ -126,7 +134,17 @@ def run(cfg: PipelineConfig) -> None:
         save_vuln_report(all_findings, cfg.output_dir / "vulns-normalized.json")
 
     # ------------------------------------------------------------------
-    # 6. Экспорт отчётов
+    # 7. Подпись SBOM с уязвимостями
+    # ------------------------------------------------------------------
+    signed_bom = cfg.output_dir / SIGNED_BOM_FILE
+    SbomHandler.write_json(sbom_data, signed_bom)
+    sign.sign_sbom(signed_bom, signed_bom)
+
+    logging.info(f"[pipeline] SBOM без уязвимостей: {signed_dedup_bom}")
+    logging.info(f"[pipeline] SBOM с уязвимостями:  {signed_bom}")
+
+    # ------------------------------------------------------------------
+    # 8. Экспорт отчётов
     # ------------------------------------------------------------------
     _export_reports(sbom_data, all_findings, cfg)
 

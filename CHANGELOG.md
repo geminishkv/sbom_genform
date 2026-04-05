@@ -12,10 +12,27 @@
 
 - Опциональное BDU-обогащение уязвимостей через `--bdu` и переменную окружения `BDU`
 - Выгрузка `BDU / ID` в Excel, Word и ODT отчёты
+- BDU ID в CycloneDX SBOM теперь сохраняется в `vulnerabilities[].properties[]` как `ru.fstec.bdu:id`
+- Дедупликация уязвимостей (`dedup.dedup_vulns`): одна и та же CVE в одном компоненте из нескольких сканеров сводится к одной записи с наибольшим CVSS-баллом; ключ — `CVE-ID::purl` (или `CVE-ID::name@version` при отсутствии PURL)
+- Два подписанных SBOM на выходе пайплайна:
+  - `app-bom-dedup-signed.json` + `app-bom-dedup-signed.sig` — SBOM без уязвимостей (SHA-256 подпись после дедупликации компонентов, до сканирования)
+  - `merged-bom-signed.json` + `merged-bom-signed.sig` — SBOM с уязвимостями (SHA-256 подпись после слияния)
+- Новая константа `SIGNED_DEDUP_BOM_FILE = "app-bom-dedup-signed.json"` в `constants.py`
+- Пересмотренный порядок шагов пайплайна (8 шагов вместо 6):
+  1. Генерация → 2. Дедупликация компонентов → 3. Подпись (без уязв.) → 4. Сканирование → 5. Дедупликация уязвимостей → 6. Слияние → 7. Подпись (с уязв.) → 8. Экспорт
+- Новые тесты в `tests/test_smoke.py`:
+  - `test_dedup_vulns_*` (7 тест-кейсов для `dedup_vulns`)
+  - `test_sign_sig_file_named_after_output` — имя `.sig` соответствует имени выходного JSON
+  - `test_two_signed_sboms_are_independent` — оба SBOM независимо верифицируемы
+  - `test_two_sig_files_are_distinct` — `.sig` файлы не совпадают
+- Новый файл `tests/unit/sbom_pipeline/test_dedup_vulns.py` с 18 юнит-тестами для `dedup_vulns` (классы `TestDedupByCveAndComponent`, `TestCvssSelection`, `TestFallbackKey`, базовые контракты)
 
 ### Изменено
 
-- BDU ID в CycloneDX SBOM теперь сохраняется в `vulnerabilities[].properties[]` как `ru.fstec.bdu:id`
+- Trivy SBOM-сканирование теперь использует `app-bom-dedup-signed.json` вместо `app-bom-dedup.json`
+- README: обновлена таблица артефактов и диаграмма Mermaid
+
+---
 
 ## [2.1.0] — 2026-03-21
 

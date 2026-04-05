@@ -24,7 +24,8 @@ REPORTS_DIR = "secgensbom_reports"
 # Имена файлов артефактов
 APP_BOM_FILE = "app-bom-cdxgen.json"
 DEDUP_BOM_FILE = "app-bom-dedup.json"
-SIGNED_BOM_FILE = "merged-bom-signed.json"
+SIGNED_DEDUP_BOM_FILE = "app-bom-dedup-signed.json"   # SBOM без уязвимостей
+SIGNED_BOM_FILE = "merged-bom-signed.json"            # SBOM с уязвимостями
 
 # Субдиректории сканеров
 TRIVY_DIR = "trivy"
