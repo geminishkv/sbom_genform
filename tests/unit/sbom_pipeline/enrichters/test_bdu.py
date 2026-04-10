@@ -277,3 +277,44 @@ def test_get_bdu_ids_by_cves_returns_empty_dict_when_csrf_token_missing(monkeypa
     result = bdu.get_bdu_ids_by_cves(["CVE-2024-0001"])
 
     assert result == {}
+
+
+def test_rate_limit_sleep_called_between_requests(monkeypatch):
+    fake_get = FakeRequestsGet(
+        search_results={
+            "2024-0001": "BDU:2024-00001",
+            "2024-0002": "BDU:2024-00002",
+            "2024-0003": "BDU:2024-00003",
+        }
+    )
+    monkeypatch.setattr(bdu.requests, "get", fake_get)
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(bdu.time, "sleep", lambda s: sleep_calls.append(s))
+
+    bdu.get_bdu_ids_by_cves(["CVE-2024-0001", "CVE-2024-0002", "CVE-2024-0003"])
+
+    # N CVEs → N-1 sleeps, each equal to RATE_LIMIT_DELAY
+    assert len(sleep_calls) == 2
+    assert all(s == bdu.RATE_LIMIT_DELAY for s in sleep_calls)
+
+
+def test_rate_limit_sleep_not_called_for_single_cve(monkeypatch):
+    fake_get = FakeRequestsGet(search_results={"2024-0001": "BDU:2024-00001"})
+    monkeypatch.setattr(bdu.requests, "get", fake_get)
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(bdu.time, "sleep", lambda s: sleep_calls.append(s))
+
+    bdu.get_bdu_ids_by_cves(["CVE-2024-0001"])
+
+    assert sleep_calls == []
+
+
+def test_rate_limit_sleep_not_called_when_no_valid_cves(monkeypatch):
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(bdu.time, "sleep", lambda s: sleep_calls.append(s))
+
+    bdu.get_bdu_ids_by_cves(["not-a-cve", "GHSA-1234-5678-9012"])
+
+    assert sleep_calls == []

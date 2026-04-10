@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from typing import Dict, Iterable
 from urllib.parse import quote, unquote
 
@@ -12,6 +13,7 @@ from bs4 import BeautifulSoup
 
 BDU_VUL_URL = "https://bdu.fstec.ru/vul"
 REQUEST_TIMEOUT = (10, 60)
+RATE_LIMIT_DELAY: float = 1.0
 
 _CVE_ID_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
@@ -61,7 +63,9 @@ def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
         logging.warning("[bdu_client] Не удалось получить CSRF-токены: %s", exc)
         return result
 
-    for cve_id in normalized_cves:
+    for idx, cve_id in enumerate(normalized_cves):
+        if idx > 0:
+            time.sleep(RATE_LIMIT_DELAY)
         try:
             response = requests.get(
                 BDU_VUL_URL,
