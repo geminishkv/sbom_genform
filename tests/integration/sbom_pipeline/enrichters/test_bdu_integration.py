@@ -71,3 +71,36 @@ def test_get_bdu_ids_by_cves_filters_blank_values_and_unknowns():
     result = bdu.get_bdu_ids_by_cves(["", "   ", known_cve_id, unknown_cve_id])
 
     assert result == {known_cve_id: expected_bdu_id}
+
+
+@pytest.mark.skipif(
+    os.getenv("BDU_INTEGRATION") != "1",
+    reason="Set BDU_INTEGRATION=1 to run real BDU integration tests",
+)
+def test_get_bdu_ids_by_cves_skips_non_cve_format_identifiers():
+    """Non-CVE identifiers (GHSA, plain strings) must be silently ignored."""
+    known_cve_id = _known_cve()
+    expected_bdu_id = _expected_bdu_id()
+
+    result = bdu.get_bdu_ids_by_cves(
+        ["GHSA-1234-5678-9012", "not-a-cve", "BDU:2024-00001", "12345", known_cve_id]
+    )
+
+    assert result == {known_cve_id: expected_bdu_id}
+    assert "GHSA-1234-5678-9012" not in result
+    assert "not-a-cve" not in result
+    assert "BDU:2024-00001" not in result
+    assert "12345" not in result
+
+
+def test_get_bdu_ids_by_cves_returns_empty_without_network_for_all_non_cve():
+    """All-non-CVE input must return {} immediately without any network call."""
+    import unittest.mock as mock
+
+    with mock.patch.object(bdu.requests, "get") as mock_get:
+        result = bdu.get_bdu_ids_by_cves(
+            ["GHSA-1234-5678-9012", "not-a-cve", "BDU:2024-00001", "", "   "]
+        )
+
+    assert result == {}
+    mock_get.assert_not_called()

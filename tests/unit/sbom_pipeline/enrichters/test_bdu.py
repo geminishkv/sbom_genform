@@ -228,3 +228,52 @@ def test_extract_bdu_id_returns_none_for_real_notfound_fixture():
     html = html_path.read_text(encoding="utf-8")
 
     assert bdu._extract_bdu_id(html) is None
+
+
+def test_get_bdu_ids_by_cves_skips_non_cve_strings(monkeypatch):
+    fake_get = FakeRequestsGet(search_results={"2024-0001": "BDU:2024-00001"})
+    monkeypatch.setattr(bdu.requests, "get", fake_get)
+
+    result = bdu.get_bdu_ids_by_cves(
+        ["CVE-2024-0001", "GHSA-1234-5678-9012", "not-a-cve", "BDU:2024-00001"]
+    )
+
+    # Only the valid CVE entry should be processed and returned
+    assert result == {"CVE-2024-0001": "BDU:2024-00001"}
+    # Non-CVE inputs must not trigger any search requests to BDU
+    search_calls = [c for c in fake_get.calls if c["params"] is not None]
+    assert len(search_calls) == 1
+
+
+def test_get_bdu_ids_by_cves_returns_empty_dict_if_all_inputs_are_non_cve(monkeypatch):
+    fake_get = FakeRequestsGet()
+    monkeypatch.setattr(bdu.requests, "get", fake_get)
+
+    result = bdu.get_bdu_ids_by_cves(["GHSA-1234-5678-9012", "not-a-cve"])
+
+    assert result == {}
+    # No network requests should be made at all
+    assert fake_get.calls == []
+
+
+def test_get_bdu_ids_by_cves_returns_empty_dict_when_csrf_fetch_fails(monkeypatch):
+    def raises(*args, **kwargs):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr(bdu.requests, "get", raises)
+
+    result = bdu.get_bdu_ids_by_cves(["CVE-2024-0001"])
+
+    assert result == {}
+
+
+def test_get_bdu_ids_by_cves_returns_empty_dict_when_csrf_token_missing(monkeypatch):
+    monkeypatch.setattr(
+        bdu,
+        "_get_csrf_tokens",
+        lambda: (_ for _ in ()).throw(RuntimeError("Не найден cookie YII_CSRF_TOKEN")),
+    )
+
+    result = bdu.get_bdu_ids_by_cves(["CVE-2024-0001"])
+
+    assert result == {}

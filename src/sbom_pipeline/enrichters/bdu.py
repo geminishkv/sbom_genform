@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 BDU_VUL_URL = "https://bdu.fstec.ru/vul"
 REQUEST_TIMEOUT = (10, 60)
 
+_CVE_ID_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
+
 DEFAULT_HEADERS = {
     "Content-Type": "application/x-www-form-urlencoded",
     "User-Agent": (
@@ -40,11 +42,24 @@ def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
         Dict[str, str]: ключ — cve_id, значение — bdu_id
     """
     result: Dict[str, str] = {}
-    normalized_cves = [cve.strip() for cve in cve_ids if cve and cve.strip()]
+    normalized_cves: list[str] = []
+    for cve in cve_ids:
+        if not cve or not cve.strip():
+            continue
+        stripped = cve.strip()
+        if not _CVE_ID_RE.match(stripped):
+            logging.warning("[bdu_client] Пропуск не-CVE идентификатора: %s", stripped)
+            continue
+        normalized_cves.append(stripped)
+
     if not normalized_cves:
         return result
 
-    cookie_jar, query_token = _get_csrf_tokens()
+    try:
+        cookie_jar, query_token = _get_csrf_tokens()
+    except Exception as exc:
+        logging.warning("[bdu_client] Не удалось получить CSRF-токены: %s", exc)
+        return result
 
     for cve_id in normalized_cves:
         try:
