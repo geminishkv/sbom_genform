@@ -5,13 +5,15 @@ log_level: info
 indexer:
   connstring: >-
     host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable
+    pool_max_conns=10
   scanlock_retry: 10
-  layer_scan_concurrency: 5
+  layer_scan_concurrency: 8
   migrations: true
 
 matcher:
   connstring: >-
     host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable
+    pool_max_conns=10
   max_diff_size: 10000
   indexer_addr: http://localhost:8080
   migrations: true
@@ -19,6 +21,7 @@ matcher:
 notifier:
   connstring: >-
     host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable
+    pool_max_conns=10
   indexer_addr: http://localhost:8080
   matcher_addr: http://localhost:8080
   migrations: true

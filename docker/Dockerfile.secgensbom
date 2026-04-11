@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
 ARG VERSION=latest
@@ -10,7 +11,9 @@ LABEL org.opencontainers.image.title="sbom-pipeline" \
       org.opencontainers.image.authors="Elijah S Shmakov"
 
 # --- Системные зависимости + Docker CLI ---
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg git jq \
  && mkdir -p /etc/apt/keyrings \
  && curl -fsSL https://download.docker.com/linux/debian/gpg \
@@ -19,24 +22,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     https://download.docker.com/linux/debian \
     $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
     > /etc/apt/sources.list.d/docker.list \
- && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli
 
 # --- Trivy ---
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
     | sh -s -- -b /usr/local/bin
 
 # --- Node.js LTS + npx (cdxgen для non-Python проектов) ---
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs
 
 # --- Python-пакет sbom-pipeline ---
 WORKDIR /app
 COPY pyproject.toml LICENSE.md README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+ && pip install .
 
 # --- Демо-проект (монтируй свой через -v /path:/app/project_inject) ---
 COPY examples/project_inject ./examples/project_inject

@@ -7,6 +7,18 @@ services:
       POSTGRES_USER: clair
       POSTGRES_PASSWORD: clair
       POSTGRES_DB: clair
+    # Tuned for Clair's write-heavy initial updater load and query patterns.
+    # synchronous_commit=off makes updater bulk-writes ~3–5× faster at the
+    # cost of losing at most ~200 ms of committed data on a hard crash —
+    # acceptable for a vulnerability DB that's always re-fetchable.
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c max_connections=50
+      -c synchronous_commit=off
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
     volumes:
       - clair-db-data:/var/lib/postgresql/data
     healthcheck:
