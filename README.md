@@ -253,7 +253,7 @@ flowchart TD
         end
 
         TRIVY & DEPCHECK & CLAIR --> DDUP2["5 · dedup.py\nдедупликация уязвимостей\nпо CVE + компонент"]
-        DDUP2 --> MERGE["6 · vuln_merger.py\nvulnerabilities&#91;&#93; в SBOM"]
+        DDUP2 --> MERGE["6 · vuln_merger.py\nvulnerabilities[] в SBOM"]
         MERGE --> SIGN2["7 · sign.py\nmerged-bom-signed.json + .sig\nSHA-256 — SBOM с уязвимостями"]
         SIGN2 --> EXPORT["8 · exporter.py"]
     end
