@@ -91,13 +91,14 @@ def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
             bdu_id = _extract_bdu_id(response.text)
             if bdu_id:
                 result[cve_id] = bdu_id
-                logging.info("[bdu_client] BDU-ID найден для %s: %s", cve_id, bdu_id)
+                logging.debug("[bdu_client] BDU-ID найден для %s: %s", cve_id, bdu_id)
             else:
-                logging.info("[bdu_client] BDU-ID не найден для %s", cve_id)
+                logging.debug("[bdu_client] BDU-ID не найден для %s", cve_id)
 
         except requests.RequestException as exc:
             logging.warning("[bdu_client] Ошибка запроса для %s: %s", cve_id, exc)
 
+    logging.info(f"[bdu_client] Найдено {len(result)} BDU-ID для {len(normalized_cves)} CVE")
     return result
 
 # --- Helper functions ---

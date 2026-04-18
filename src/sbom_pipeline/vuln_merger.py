@@ -97,6 +97,11 @@ def merge_vulns_into_sbom(
             ]
         if f.fixed_version:
             entry["recommendation"] = f"Обновить до версии {f.fixed_version}"
+        if f.acceptability_status:
+            entry.setdefault("properties", []).append({
+                "name": "acceptability_status",
+                "value": f.acceptability_status,
+            })
 
         vulns.append(entry)
 
@@ -120,6 +125,7 @@ def save_vuln_report(findings: List[VulnFinding], path: Path) -> None:
             "description": f.description,
             "scanner": f.scanner,
             "fixed_version": f.fixed_version,
+            "acceptability_status": f.acceptability_status,
         }
         for f in findings
     ]

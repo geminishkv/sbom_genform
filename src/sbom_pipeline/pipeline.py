@@ -100,6 +100,8 @@ def run(cfg: PipelineConfig) -> None:
         data_dir=cfg.dep_check_data or Path(".dependency-check-data"),
         host_project_dir=cfg.host_project_dir,
         host_output_dir=cfg.host_dep_report_dir,
+        host_data_dir=cfg.host_dep_check_data,
+        nvd_api_key=cfg.nvd_api_key,
     )
     # Clair (опционально)
     if not cfg.skip_clair and cfg.image_name:
@@ -107,9 +109,28 @@ def run(cfg: PipelineConfig) -> None:
             image_name=cfg.image_name,
             output_dir=cfg.clair_dir,
             clair_endpoint=cfg.clair_endpoint,
+            nvd_api_key=cfg.nvd_api_key or "",
         )
 
     logging.info(f"[pipeline] Всего уязвимостей из всех сканеров: {len(all_findings)}")
+
+    # Cross-populate CVSS scores: build a CVE→best_score index from every
+    # finding that already has a non-zero score, then apply it to any
+    # finding that still has score == 0.0.  This fills in Clair findings
+    # whose NVD enricher is not configured, using data from Trivy/depcheck.
+    _cve_score: Dict[str, float] = {}
+    for _f in all_findings:
+        if _f.cvss_score and _f.cve_id not in _cve_score:
+            _cve_score[_f.cve_id] = _f.cvss_score
+        elif _f.cvss_score and _f.cvss_score > _cve_score.get(_f.cve_id, 0.0):
+            _cve_score[_f.cve_id] = _f.cvss_score
+    _filled = 0
+    for _f in all_findings:
+        if _f.cvss_score == 0.0 and _f.cve_id in _cve_score:
+            _f.cvss_score = _cve_score[_f.cve_id]
+            _filled += 1
+    if _filled:
+        logging.info(f"[pipeline] CVSS cross-populated для {_filled} уязвимостей")
 
     # ------------------------------------------------------------------
     # 5. Дедупликация уязвимостей
@@ -122,13 +143,23 @@ def run(cfg: PipelineConfig) -> None:
     with open(dedup_bom, encoding="utf-8") as f:
         sbom_data: Dict[str, Any] = json.load(f)
 
+    # Обогатить компоненты SBOM данными из Clair-отчётов: container_image,
+    # container_role (слой введения пакета), os_distribution.
+    if not cfg.skip_clair and cfg.image_name:
+        sanitized = cfg.image_name.replace(":", "_").replace("/", "_")
+        clair_report = cfg.clair_dir / f"clair-{sanitized}.json"
+        sbom_data = clair.enrich_sbom_with_clair_packages(
+            sbom_data,
+            clair_report,
+            image_name=cfg.image_name,
+        )
+
     if all_findings:
         sbom_data = merge_vulns_into_sbom(
             sbom_data,
             all_findings,
             enable_bdu=cfg.use_bdu,
         )
-        SbomHandler.write_json(sbom_data, signed_bom)
 
         # Сохранить нормализованный vuln-dump
         save_vuln_report(all_findings, cfg.output_dir / "vulns-normalized.json")
@@ -146,6 +177,8 @@ def run(cfg: PipelineConfig) -> None:
     # ------------------------------------------------------------------
     # 8. Экспорт отчётов
     # ------------------------------------------------------------------
+    logging.info("[pipeline] Экспорт отчётов...")
+
     _export_reports(sbom_data, all_findings, cfg)
 
     logging.info("[pipeline] Пайплайн завершён.")
@@ -211,9 +244,9 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
     """Извлечь зависимости типа 'library' из SBOM."""
     deps: List[Dependency] = []
 
-    # Container image from SBOM metadata
+    # Container image from SBOM metadata (used as fallback when component has no own property)
     metadata_comp = sbom.get("metadata", {}).get("component", {})
-    container_image = (
+    metadata_image = (
         metadata_comp.get("name", "")
         if metadata_comp.get("type") == "container"
         else ""
@@ -228,14 +261,24 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
                 for p in (comp.get("properties") or [])
                 if isinstance(p, dict)
             }
+            # depType: collect only string-valued property names/values
+            # (the full properties list contains dicts, not type strings)
+            raw_props = comp.get("properties") or []
+            dep_type_strings: List[str] = [
+                p.get("value", "")
+                for p in raw_props
+                if isinstance(p, dict) and isinstance(p.get("value"), str)
+            ]
+            # Per-component container_image property (set by Clair enrichment) takes
+            # priority; fall back to the image name from SBOM metadata.
+            container_image = _find_prop(
+                props,
+                ("container_image", "container-image", "containerImage"),
+            ) or metadata_image
             dep = Dependency(
                 name=comp.get("name", ""),
                 version=comp.get("version", ""),
-                depType=(
-                    comp.get("properties", [])
-                    if isinstance(comp.get("properties"), list)
-                    else []
-                ),
+                depType=dep_type_strings,
                 purl=comp.get("purl") or "",
                 pathToSbom=sbom_path,
                 package_type=_purl_type(comp.get("purl") or ""),
@@ -251,6 +294,10 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
                 container_role=_find_prop(
                     props,
                     ("container-role", "container_role", "containerRole", "cdx:docker:layer", "layer"),
+                ),
+                os_distribution=_find_prop(
+                    props,
+                    ("os_distribution", "os-distribution", "osDistribution"),
                 ),
             )
             deps.append(dep)

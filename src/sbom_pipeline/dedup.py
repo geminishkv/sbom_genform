@@ -57,6 +57,10 @@ def dedup_vulns(findings: List["VulnFinding"]) -> List["VulnFinding"]:
     Если несколько сканеров обнаружили одну и ту же уязвимость в одном
     компоненте — оставляем запись с наибольшим cvss_score; при равном
     балле — первую встреченную.
+
+    После дедупликации заполняем cvss_score == 0.0 используя лучший
+    известный балл для этого CVE из других компонентов (cross-component
+    propagation).
     """
     best: dict[str, "VulnFinding"] = {}
 
@@ -71,4 +75,19 @@ def dedup_vulns(findings: List["VulnFinding"]) -> List["VulnFinding"]:
     logging.info(
         f"[dedup] {len(findings)} → {len(deduped)} уязвимостей (удалено {removed} дублей)"
     )
+
+    # Second pass: fill cvss_score == 0 from the best score for that CVE ID
+    # seen across all (possibly different) components.
+    cve_best_score: dict[str, float] = {}
+    for f in deduped:
+        if f.cvss_score > cve_best_score.get(f.cve_id, 0.0):
+            cve_best_score[f.cve_id] = f.cvss_score
+    filled = 0
+    for f in deduped:
+        if f.cvss_score == 0.0 and cve_best_score.get(f.cve_id, 0.0) > 0.0:
+            f.cvss_score = cve_best_score[f.cve_id]
+            filled += 1
+    if filled:
+        logging.debug(f"[dedup] cvss_score заполнен для {filled} уязвимостей")
+
     return deduped

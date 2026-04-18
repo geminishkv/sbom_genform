@@ -39,8 +39,13 @@ class PipelineConfig:
     host_project_dir: Optional[Path] = None
     host_output_dir: Optional[Path] = None
     host_dep_report_dir: Optional[Path] = None
+    host_dep_check_data: Optional[Path] = None
     host_trivy_report_dir: Optional[Path] = None
+    host_clair_report_dir: Optional[Path] = None
     dep_check_data: Optional[Path] = None
+
+    # --- NVD API ---
+    nvd_api_key: Optional[str] = None
 
     # --- Сканирование образов ---
     image_name: Optional[str] = None
@@ -85,7 +90,10 @@ class PipelineConfig:
             host_project_dir=_path("HOST_PROJECT_DIR"),
             host_output_dir=_path("HOST_OUTPUT_DIR"),
             host_dep_report_dir=_path("HOST_DEP_REPORT_DIR"),
+            host_dep_check_data=_path("HOST_DEP_CHECK_DATA"),
             host_trivy_report_dir=_path("HOST_TRIVY_REPORT_DIR"),
+            host_clair_report_dir=_path("HOST_CLAIR_REPORT_DIR"),
+            nvd_api_key=os.getenv("NVD_API_KEY") or None,
             dep_check_data=_path("DEP_CHECK_DATA", ".dependency-check-data"),
             image_name=os.getenv("IMAGE_NAME") or None,
             clair_endpoint=os.getenv("CLAIR_ENDPOINT", "http://clair:8080"),

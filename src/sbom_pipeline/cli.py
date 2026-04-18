@@ -256,6 +256,7 @@ def cmd_run(
     no_clair: bool = typer.Option(
         True, "--no-clair/--clair",
         help="Пропустить шаг Clair (по умолчанию: пропускать)",
+        envvar="SKIP_CLAIR",
     ),
     use_bdu: bool = typer.Option(
         False, "--bdu/--no-bdu",

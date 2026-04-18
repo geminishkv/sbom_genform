@@ -25,7 +25,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sbom_pipeline.vuln_merger import VulnFinding
+from sbom_pipeline.vuln_merger import VulnFinding, merge_vulns_into_sbom, save_vuln_report
 from sbom_pipeline.exporter import Exporter, _COMP_COLUMNS, _VULN_COLUMNS
 
 # ---------------------------------------------------------------------------
@@ -251,6 +251,23 @@ class TestExtractDependencies:
         deps = self._extract(sbom)
         assert deps[0].container_image == ""
 
+    def test_container_image_from_component_property(self):
+        """container_image property set by Clair enrichment takes priority over metadata."""
+        sbom = _sbom(
+            metadata={"component": {"type": "container", "name": "old-image:1.0"}},
+            components=[_comp(properties=[{"name": "container_image", "value": "new-image:2.0"}])],
+        )
+        deps = self._extract(sbom)
+        assert deps[0].container_image == "new-image:2.0"
+
+    def test_container_image_property_fallback_to_metadata_when_prop_absent(self):
+        """Without per-component property, still falls back to metadata container name."""
+        sbom = _sbom(
+            metadata={"component": {"type": "container", "name": "meta-image:1.0"}},
+            components=[_comp()],
+        )
+        deps = self._extract(sbom)
+        assert deps[0].container_image == "meta-image:1.0"
     # -----------------------------------------------------------------------
     # container_role
     # -----------------------------------------------------------------------
@@ -352,7 +369,7 @@ class TestTrivyRecommendation:
     def test_acceptability_status_populated(self):
         data = self._trivy_result(Status="fixed")
         findings = self._parse(data)
-        assert findings[0].acceptability_status == "fixed"
+        assert findings[0].acceptability_status == "Исправлено"
 
     def test_acceptability_status_empty_when_absent(self):
         data = self._trivy_result()
@@ -362,7 +379,12 @@ class TestTrivyRecommendation:
     def test_acceptability_status_will_not_fix(self):
         data = self._trivy_result(Status="will_not_fix")
         findings = self._parse(data)
-        assert findings[0].acceptability_status == "will_not_fix"
+        assert findings[0].acceptability_status == "Исправление не планируется"
+
+    def test_acceptability_status_unknown_value_passed_through(self):
+        data = self._trivy_result(Status="some_future_status")
+        findings = self._parse(data)
+        assert findings[0].acceptability_status == "some_future_status"
 
 
 class TestClairRecommendation:
@@ -378,37 +400,58 @@ class TestClairRecommendation:
         p.unlink(missing_ok=True)
         return findings
 
-    def _clair_data(self, links: list | None = None) -> dict:
+    def _clair_data(self, links: str = "") -> dict:
+        """Build a minimal current-format Clair report JSON."""
         return {
+            "manifest_hash": "sha256:test",
+            "packages": {
+                "1": {"id": "1", "name": "curl", "version": "7.64.0", "kind": "binary"}
+            },
             "vulnerabilities": {
-                "CVE-2024-2222": {
-                    "Package": {"Name": "curl", "Version": "7.64.0"},
-                    "NormalizedSeverity": "High",
-                    "Description": "URL confusion in curl",
-                    "FixedInVersion": "8.0.0",
-                    "Links": links or [],
+                "v1": {
+                    "name": "CVE-2024-2222",
+                    "description": "URL confusion in curl",
+                    "severity": "high",
+                    "normalized_severity": "High",
+                    "links": links,
+                    "fixed_in_version": "8.0.0",
+                    "package": {},
                 }
-            }
+            },
+            "package_vulnerabilities": {"1": ["v1"]},
+            "environments": {},
+            "distributions": {},
+            "enrichments": {},
         }
 
     def test_recommendation_first_link(self):
-        findings = self._parse(self._clair_data(links=["https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-2222", "https://other.link"]))
+        findings = self._parse(self._clair_data(links="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-2222"))
         assert findings[0].recommendation == "https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2024-2222"
 
     def test_recommendation_empty_when_no_links(self):
-        findings = self._parse(self._clair_data(links=[]))
+        findings = self._parse(self._clair_data(links=""))
         assert findings[0].recommendation == ""
 
     def test_recommendation_empty_when_links_absent(self):
         data = {
+            "manifest_hash": "sha256:test",
+            "packages": {
+                "1": {"id": "1", "name": "curl", "version": "7.64.0", "kind": "binary"}
+            },
             "vulnerabilities": {
-                "CVE-2024-2222": {
-                    "Package": {"Name": "curl", "Version": "7.64.0"},
-                    "NormalizedSeverity": "High",
-                    "Description": "desc",
-                    "FixedInVersion": "",
+                "v1": {
+                    "name": "CVE-2024-2222",
+                    "description": "desc",
+                    "severity": "high",
+                    "normalized_severity": "High",
+                    "fixed_in_version": "",
+                    "package": {},
                 }
-            }
+            },
+            "package_vulnerabilities": {"1": ["v1"]},
+            "environments": {},
+            "distributions": {},
+            "enrichments": {},
         }
         findings = self._parse(data)
         assert findings[0].recommendation == ""
@@ -468,6 +511,190 @@ class TestDepcheckRecommendation:
         refs = [{"name": "NVD"}]  # no url key
         findings = self._parse(self._depcheck_data(refs=refs))
         assert findings[0].recommendation == ""
+
+
+# ===========================================================================
+# 4b. dependency-check — GHSA → CVE id extraction
+# ===========================================================================
+
+class TestDepcheckCveId:
+    """depcheck._parse() resolves GHSA names to CVE IDs via NVD references."""
+
+    def _parse(self, data: dict):
+        import tempfile, json as _json
+        from sbom_pipeline.scanner.depcheck import _parse
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            _json.dump(data, f)
+            p = Path(f.name)
+        findings = _parse(p)
+        p.unlink(missing_ok=True)
+        return findings
+
+    def _depcheck_data(self, name: str, refs: list | None = None) -> dict:
+        vuln: dict = {
+            "name": name,
+            "severity": "MEDIUM",
+            "description": "test",
+            "cvssv3": {"baseScore": 5.0},
+        }
+        if refs is not None:
+            vuln["references"] = refs
+        return {
+            "dependencies": [{
+                "fileName": "brace-expansion-3.0.0.tgz",
+                "packages": [{"id": "pkg:npm/brace-expansion@3.0.0"}],
+                "vulnerabilities": [vuln],
+            }]
+        }
+
+    def test_ghsa_replaced_by_cve_from_nvd_url(self):
+        refs = [
+            {"url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v"},
+            {"url": "https://nvd.nist.gov/vuln/detail/CVE-2026-33750"},
+        ]
+        findings = self._parse(self._depcheck_data("GHSA-f886-m6hf-6m8v", refs))
+        assert findings[0].cve_id == "CVE-2026-33750"
+
+    def test_plain_cve_name_unchanged(self):
+        refs = [{"url": "https://nvd.nist.gov/vuln/detail/CVE-2023-1234"}]
+        findings = self._parse(self._depcheck_data("CVE-2023-1234", refs))
+        assert findings[0].cve_id == "CVE-2023-1234"
+
+    def test_ghsa_kept_when_no_nvd_ref(self):
+        refs = [
+            {"url": "https://github.com/advisories/GHSA-f886-m6hf-6m8v"},
+            {"url": "https://github.com/owner/repo/pull/96"},
+        ]
+        findings = self._parse(self._depcheck_data("GHSA-f886-m6hf-6m8v", refs))
+        assert findings[0].cve_id == "GHSA-f886-m6hf-6m8v"
+
+    def test_ghsa_kept_when_no_refs(self):
+        findings = self._parse(self._depcheck_data("GHSA-f886-m6hf-6m8v"))
+        assert findings[0].cve_id == "GHSA-f886-m6hf-6m8v"
+
+    def test_cve_id_uppercased(self):
+        refs = [{"url": "https://nvd.nist.gov/vuln/detail/cve-2026-33750"}]
+        findings = self._parse(self._depcheck_data("GHSA-f886-m6hf-6m8v", refs))
+        assert findings[0].cve_id == "CVE-2026-33750"
+
+
+class TestDepcheckFixedVersion:
+    """depcheck._parse() extracts fixed_version from vulnerableSoftware CPE ranges."""
+
+    def _parse(self, data: dict):
+        import tempfile, json as _json
+        from sbom_pipeline.scanner.depcheck import _parse
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            _json.dump(data, f)
+            p = Path(f.name)
+        findings = _parse(p)
+        p.unlink(missing_ok=True)
+        return findings
+
+    def _depcheck_data(self, vulnerable_software: list | None = None) -> dict:
+        vuln: dict = {
+            "name": "CVE-2024-1234",
+            "severity": "HIGH",
+            "description": "test",
+            "cvssv3": {"baseScore": 7.5},
+        }
+        if vulnerable_software is not None:
+            vuln["vulnerableSoftware"] = vulnerable_software
+        return {
+            "dependencies": [{
+                "fileName": "brace-expansion-3.0.0.tgz",
+                "packages": [{"id": "pkg:npm/brace-expansion@3.0.0"}],
+                "vulnerabilities": [vuln],
+            }]
+        }
+
+    def test_exclusive_upper_bound_extracted(self):
+        # CPE as seen in the real report: \>\=2.0.0\<2.0.3
+        sw = [{"software": {"id": r"cpe:2.3:a:*:brace-expansion:\>\=2.0.0\<2.0.3:*:*:*:*:*:*:*"}}]
+        findings = self._parse(self._depcheck_data(sw))
+        assert findings[0].fixed_version == "2.0.3"
+
+    def test_inclusive_upper_bound_not_extracted(self):
+        # <=2.0.1 — cannot determine the fix version
+        sw = [{"software": {"id": r"cpe:2.3:a:*:brace-expansion:\>\=2.0.0\<\=2.0.1:*:*:*:*:*:*:*"}}]
+        findings = self._parse(self._depcheck_data(sw))
+        assert findings[0].fixed_version == ""
+
+    def test_no_vulnerable_software_returns_empty(self):
+        findings = self._parse(self._depcheck_data())
+        assert findings[0].fixed_version == ""
+
+    def test_empty_vulnerable_software_returns_empty(self):
+        findings = self._parse(self._depcheck_data([]))
+        assert findings[0].fixed_version == ""
+
+    def test_real_report_cpe_example(self):
+        # Mirrors GHSA-f886-m6hf-6m8v entry from the sample report
+        sw = [{"software": {"id": r"cpe:2.3:a:*:brace-expansion:\>\=2.0.0\<2.0.3:*:*:*:*:*:*:*"}}]
+        findings = self._parse(self._depcheck_data(sw))
+        assert findings[0].fixed_version == "2.0.3"
+
+
+class TestDepcheckAcceptabilityStatus:
+    """depcheck._parse() sets acceptability_status from the 'unscored' flag."""
+
+    def _parse(self, data: dict):
+        import tempfile, json as _json
+        from sbom_pipeline.scanner.depcheck import _parse
+        with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as f:
+            _json.dump(data, f)
+            p = Path(f.name)
+        findings = _parse(p)
+        p.unlink(missing_ok=True)
+        return findings
+
+    def _depcheck_data(self, unscored: str | None = None) -> dict:
+        vuln: dict = {
+            "name": "CVE-2024-1234",
+            "severity": "HIGH",
+            "description": "test",
+            "cvssv3": {"baseScore": 7.5},
+        }
+        if unscored is not None:
+            vuln["unscored"] = unscored
+        return {
+            "dependencies": [{
+                "fileName": "lib.tgz",
+                "packages": [{"id": "pkg:npm/lib@1.0.0"}],
+                "vulnerabilities": [vuln],
+            }]
+        }
+
+    def test_unscored_true_sets_status(self):
+        findings = self._parse(self._depcheck_data(unscored="true"))
+        assert findings[0].acceptability_status == "Оценка не присвоена (advisory)"
+
+    def test_unscored_absent_gives_empty(self):
+        findings = self._parse(self._depcheck_data())
+        assert findings[0].acceptability_status == ""
+
+    def test_unscored_false_string_gives_empty(self):
+        findings = self._parse(self._depcheck_data(unscored="false"))
+        assert findings[0].acceptability_status == ""
+
+    def test_real_report_ghsa_is_unscored(self):
+        # All GHSA/NPM entries in the sample report carry "unscored": "true"
+        data = {
+            "dependencies": [{
+                "fileName": "brace-expansion-3.0.0.tgz",
+                "packages": [{"id": "pkg:npm/brace-expansion@3.0.0"}],
+                "vulnerabilities": [{
+                    "source": "NPM",
+                    "name": "GHSA-f886-m6hf-6m8v",
+                    "unscored": "true",
+                    "severity": "moderate",
+                    "cvssv3": {"baseScore": 6.5},
+                    "description": "test",
+                }],
+            }]
+        }
+        findings = self._parse(data)
+        assert findings[0].acceptability_status == "Оценка не присвоена (advisory)"
 
 
 # ===========================================================================
@@ -672,3 +899,100 @@ class TestExcelExportHeaders:
         status_col = headers["Статус допустимости в рассматриваемой конфигурации"]
         assert ws.cell(2, rec_col).value == "Обновить до 2.0"
         assert ws.cell(2, status_col).value == "end_of_life"
+
+
+# ===========================================================================
+# 8. merge_vulns_into_sbom — acceptability_status written to SBOM properties
+# ===========================================================================
+
+def _minimal_sbom_with_comp() -> dict:
+    return {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "components": [
+            {
+                "type": "library",
+                "name": "libfoo",
+                "version": "1.0.0",
+                "purl": "pkg:pypi/libfoo@1.0.0",
+                "bom-ref": "pkg:pypi/libfoo@1.0.0",
+            }
+        ],
+    }
+
+
+class TestMergeVulnsAcceptabilityStatus:
+    """merge_vulns_into_sbom() writes acceptability_status as a CycloneDX property."""
+
+    def test_acceptability_status_written_as_property(self):
+        sbom = _minimal_sbom_with_comp()
+        finding = _vuln(acceptability_status="Неприменимо")
+        result = merge_vulns_into_sbom(sbom, [finding])
+        vuln_entry = result["vulnerabilities"][0]
+        props = vuln_entry.get("properties", [])
+        status_props = [p for p in props if p["name"] == "acceptability_status"]
+        assert len(status_props) == 1
+        assert status_props[0]["value"] == "Неприменимо"
+
+    def test_acceptability_status_absent_when_empty(self):
+        sbom = _minimal_sbom_with_comp()
+        finding = _vuln(acceptability_status="")
+        result = merge_vulns_into_sbom(sbom, [finding])
+        vuln_entry = result["vulnerabilities"][0]
+        props = vuln_entry.get("properties", [])
+        status_props = [p for p in props if p["name"] == "acceptability_status"]
+        assert status_props == []
+
+    def test_acceptability_status_coexists_with_bdu(self):
+        sbom = _minimal_sbom_with_comp()
+        finding = _vuln(acceptability_status="Неприменимо")
+        finding.bdu_id = "BDU:2024-00001"
+        result = merge_vulns_into_sbom(sbom, [finding], enable_bdu=False)
+        # bdu_id was set manually, but enable_bdu=False so bdu lookup skipped;
+        # acceptability_status should still appear as a property
+        vuln_entry = result["vulnerabilities"][0]
+        # With bdu_id set but no bdu lookup, we expect the property to be present
+        props = vuln_entry.get("properties", [])
+        status_props = [p for p in props if p["name"] == "acceptability_status"]
+        assert len(status_props) == 1
+
+    def test_fixed_version_and_acceptability_both_present(self):
+        sbom = _minimal_sbom_with_comp()
+        finding = _vuln(acceptability_status="Неприменимо")
+        # _vuln() already sets fixed_version="1.1.0"
+        result = merge_vulns_into_sbom(sbom, [finding])
+        vuln_entry = result["vulnerabilities"][0]
+        assert vuln_entry["recommendation"] == "Обновить до версии 1.1.0"
+        props = vuln_entry.get("properties", [])
+        assert any(p["value"] == "Неприменимо" for p in props)
+
+
+# ===========================================================================
+# 9. save_vuln_report — acceptability_status included in JSON output
+# ===========================================================================
+
+class TestSaveVulnReportAcceptabilityStatus:
+    """save_vuln_report() includes acceptability_status in the saved JSON."""
+
+    def test_acceptability_status_in_json(self, tmp_path):
+        import json
+        path = tmp_path / "vulns.json"
+        finding = _vuln(acceptability_status="Неприменимо")
+        save_vuln_report([finding], path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data[0]["acceptability_status"] == "Неприменимо"
+
+    def test_acceptability_status_empty_string_in_json(self, tmp_path):
+        import json
+        path = tmp_path / "vulns.json"
+        finding = _vuln(acceptability_status="")
+        save_vuln_report([finding], path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data[0]["acceptability_status"] == ""
+
+    def test_acceptability_status_key_always_present(self, tmp_path):
+        import json
+        path = tmp_path / "vulns.json"
+        save_vuln_report([_vuln()], path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert "acceptability_status" in data[0]

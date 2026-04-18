@@ -33,6 +33,7 @@ build/
 
 # Secrets and environment configs
 .env
+.envrc
 .env.local
 venv/
 .venv/

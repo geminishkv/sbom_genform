@@ -28,6 +28,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
     | sh -s -- -b /usr/local/bin
 
+# --- clairctl ---
+# Kept as a fallback; the primary execution path is `docker exec <clair-container> clairctl`
+# which uses the binary already bundled in the Clair image.
+RUN ARCH=$(dpkg --print-architecture) \
+ && curl -fsSL "https://github.com/quay/clair/releases/download/v4.9.0/clairctl-linux-${ARCH}" \
+    -o /usr/local/bin/clairctl \
+ && chmod +x /usr/local/bin/clairctl
+
 # --- Node.js LTS + npx (cdxgen для non-Python проектов) ---
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -50,10 +58,9 @@ ENV PYTHONUNBUFFERED=1 \
     PROJECT_DIR=/app/examples/project_inject \
     OUTPUT_DIR=/app/secgensbom_out \
     REPORTS_DIR=/app/secgensbom_reports \
-    SOURCE=local \
-    SKIP_CLAIR=true
+    SOURCE=local
 
 VOLUME ["/app/project_inject", "/app/secgensbom_out", "/app/secgensbom_reports"]
 
 ENTRYPOINT ["secsbom-pipeline"]
-CMD ["run"]
+CMD ["run", "-v"]

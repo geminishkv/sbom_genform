@@ -2,19 +2,36 @@ http_listen_addr: 0.0.0.0:8080
 introspection_addr: 0.0.0.0:8089
 log_level: info
 
+# Restrict updaters to reduce DB size (~4-6 GB full → ~600 MB subset).
+# The NVD CVSS enricher is explicitly listed: it downloads CVSS scores from
+# the National Vulnerability Database and attaches them to every vulnerability
+# in the report.  The enricher respects the NVD_API_KEY environment variable
+# (set in docker-compose.yml) for the higher-rate-limit tier; without it the
+# public rate limit (5 req/30 s) is used, which is fine for initial setup.
+updaters:
+  sets:
+    - alpine
+    - debian
+    - ubuntu
+    - rhel
+    - oracle
+    - aws
+    - nvd
+  config:
+    nvd: {}  # api_key is read from the NVD_API_KEY env var by Clair automatically
+
 indexer:
   connstring: >-
     host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable
     pool_max_conns=10
   scanlock_retry: 10
-  layer_scan_concurrency: 8
+  layer_scan_concurrency: 2
   migrations: true
 
 matcher:
   connstring: >-
     host=clair-db port=5432 user=clair password=clair dbname=clair sslmode=disable
     pool_max_conns=10
-  max_diff_size: 10000
   indexer_addr: http://localhost:8080
   migrations: true
 

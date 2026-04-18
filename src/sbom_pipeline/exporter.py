@@ -209,7 +209,10 @@ class Exporter:
     def _comp_rows(self) -> List[Dict[str, Any]]:
         rows = []
         for i, dep in enumerate(self.deps, start=1):
-            dep_types: list = getattr(dep, "dep_type", None) or getattr(dep, "depType", []) or []
+            dep_types: list = [
+                t for t in (getattr(dep, "dep_type", None) or getattr(dep, "depType", []) or [])
+                if isinstance(t, str)
+            ]
             attack_surface = ", ".join(
                 t for t in dep_types if "attack" in t.lower() or "поверхность" in t.lower()
             ) or getattr(dep, "attack_surface", "")

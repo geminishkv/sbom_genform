@@ -29,7 +29,11 @@ services:
 
   # ── Clair v4: vulnerability server ─────────────────────────────────────────
   clair:
-    image: quay.io/projectclair/clair:latest
+    # v4.9.0 ships claircore v1.5.48 which has a confirmed bug in
+    # RemoteFetchArena (openat fetcher.XXXXXXXX: no such file or directory).
+    # The fix landed in claircore v1.5.49 (Jan 2026) and is only available
+    # in the nightly build until a v4.9.1+ stable release is made.
+    image: quay.io/projectquay/clair:nightly
     depends_on:
       clair-db:
         condition: service_healthy
@@ -38,11 +42,14 @@ services:
       CLAIR_MODE: combo
     volumes:
       - ./docker/clair-config.yaml:/clair/config.yaml:ro
+      # Mount host Docker credentials so clairctl gets authenticated Docker Hub
+      # pulls (much higher rate limits than anonymous).
+      - ${HOME}/.docker/config.json:/root/.docker/config.json:ro
     ports:
       - "8080:8080"   # HTTP API (clairctl connects here)
       - "8089:8089"   # introspection / healthz
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8089/healthz || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8089/readyz || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 15
@@ -61,6 +68,7 @@ services:
       - ./secgensbom_out:/app/secgensbom_out
       - ./secgensbom_reports:/app/secgensbom_reports
       - ./.dependency-check-data:/app/.dependency-check-data
+      - trivy-cache:/root/.cache/trivy
       # Docker socket so the pipeline can spawn depcheck & clairctl containers
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -71,10 +79,18 @@ services:
       DEP_CHECK_DATA: /app/.dependency-check-data
       # Host-side paths for Docker-in-Docker volume mounts
       HOST_PROJECT_DIR: ${PWD}/examples/project_inject
-      HOST_OUTPUT_DIR: ${PWD}/secgensbom_out/dependency-check
-      # Clair
-      SKIP_CLAIR: "false"
+      HOST_OUTPUT_DIR: ${PWD}/secgensbom_out
+      HOST_DEP_REPORT_DIR: ${PWD}/secgensbom_out/dependency-check
+      HOST_DEP_CHECK_DATA: ${PWD}/.dependency-check-data
+      HOST_CLAIR_REPORT_DIR: ${PWD}/secgensbom_out/clair
+      # NVD API key for OWASP Dependency-Check v8+ (https://nvd.nist.gov/developers/request-an-api-key)
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      # Clair — set IMAGE_NAME to the container image you want to scan
+      SKIP_CLAIR: ${SKIP_CLAIR:-true}
+      BDU: ${BDU:-false}
+      IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
       CLAIR_ENDPOINT: http://clair:8080
 
 volumes:
   clair-db-data:
+  trivy-cache:
