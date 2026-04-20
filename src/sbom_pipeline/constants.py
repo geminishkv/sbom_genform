@@ -27,7 +27,9 @@ SBOM_OUT_DIR = "secgensbom_out"
 REPORTS_DIR = "secgensbom_reports"
 
 # Имена файлов артефактов
-APP_BOM_FILE = "app-bom-cdxgen.json"
+APP_BOM_FILE = "app-bom-merged.json"
+APP_BOM_CDXGEN_FILE = "app-bom-cdxgen.json"
+APP_BOM_SYFT_FILE = "app-bom-syft.json"
 DEDUP_BOM_FILE = "app-bom-dedup.json"
 SIGNED_DEDUP_BOM_FILE = "app-bom-dedup-signed.json"   # SBOM без уязвимостей
 SIGNED_BOM_FILE = "merged-bom-signed.json"            # SBOM с уязвимостями
@@ -40,4 +42,3 @@ DEPCHECK_DIR = "dependency-check"
 # CycloneDX
 CYCLONEDX_SPEC_VERSION = "1.5"
 CYCLONEDX_FORMAT = "CycloneDX"
-

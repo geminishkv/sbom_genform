@@ -6,10 +6,11 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
-from sbom_pipeline import cli
 from sbom_pipeline import __version__
+from sbom_pipeline import cli, generate
 from sbom_pipeline.config import PipelineConfig
 from sbom_pipeline.constants import SIGNED_DEDUP_BOM_FILE, SIGNED_BOM_FILE
 from sbom_pipeline.dedup import dedup_sbom, dedup_vulns
@@ -84,11 +85,49 @@ def test_cli_bdu_enables_use_bdu(monkeypatch):
     assert captured["use_bdu"] is True
 
 
+def test_cli_no_syft_overrides_syft_env(monkeypatch):
+    captured: dict[str, bool] = {}
+
+    def fake_pipeline_run(cfg: PipelineConfig) -> None:
+        captured["use_syft"] = cfg.use_syft
+
+    monkeypatch.setenv("USE_SYFT", "true")
+    monkeypatch.setattr(cli, "pipeline_run", fake_pipeline_run)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["run", "--no-syft"])
+
+    assert result.exit_code == 0
+    assert captured["use_syft"] is False
+
+
+def test_cli_no_cdxgen_overrides_cdxgen_env(monkeypatch):
+    captured: dict[str, bool] = {}
+
+    def fake_pipeline_run(cfg: PipelineConfig) -> None:
+        captured["use_cdxgen"] = cfg.use_cdxgen
+
+    monkeypatch.setenv("USE_CDXGEN", "true")
+    monkeypatch.setattr(cli, "pipeline_run", fake_pipeline_run)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["run", "--no-cdxgen"])
+
+    assert result.exit_code == 0
+    assert captured["use_cdxgen"] is False
+
+
 def test_config_defaults():
     cfg = PipelineConfig()
     assert cfg.source == "local"
     assert cfg.skip_clair is True
     assert cfg.use_bdu is False
+    assert cfg.use_cdxgen is True
+    assert cfg.use_syft is True
     assert cfg.project_dir == Path("examples/project_inject")
 
 
@@ -97,11 +136,15 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("GIT_URL", "https://github.com/org/repo")
     monkeypatch.setenv("SKIP_CLAIR", "false")
     monkeypatch.setenv("BDU", "true")
+    monkeypatch.setenv("USE_CDXGEN", "false")
+    monkeypatch.setenv("USE_SYFT", "true")
     cfg = PipelineConfig.from_env()
     assert cfg.source == "github"
     assert cfg.git_url == "https://github.com/org/repo"
     assert cfg.skip_clair is False
     assert cfg.use_bdu is True
+    assert cfg.use_cdxgen is False
+    assert cfg.use_syft is True
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +162,118 @@ def test_dedup_removes_duplicates():
 
         result = json.loads(out.read_text())
         assert len(result["components"]) == 2
+
+
+def test_generate_from_dir_requires_enabled_generator():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        project_dir = p / "project"
+        project_dir.mkdir()
+
+        with pytest.raises(ValueError, match="хотя бы один генератор"):
+            generate.generate_from_dir(
+                project_dir,
+                p / "app-bom-merged.json",
+                use_cdxgen=False,
+                use_syft=False,
+            )
+
+
+def test_generate_from_dir_merges_cdxgen_and_syft(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        project_dir = p / "project"
+        project_dir.mkdir()
+
+        merged_bom = p / "app-bom-merged.json"
+        cdxgen_bom = p / "app-bom-cdxgen.json"
+        syft_bom = p / "app-bom-syft.json"
+
+        def fake_cdxgen(_project_dir: Path, output_file: Path) -> Path:
+            sbom = {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "metadata": {
+                    "component": {
+                        "type": "application",
+                        "name": "demo-app",
+                        "version": "1.0.0",
+                    }
+                },
+                "components": [
+                    {
+                        "type": "library",
+                        "name": "requests",
+                        "version": "2.31.0",
+                        "purl": "pkg:pypi/requests@2.31.0",
+                    }
+                ],
+                "dependencies": [
+                    {
+                        "ref": "demo-app",
+                        "dependsOn": ["pkg:pypi/requests@2.31.0"],
+                    }
+                ],
+            }
+            output_file.write_text(json.dumps(sbom), encoding="utf-8")
+            return output_file
+
+        def fake_syft(_project_dir: Path, output_file: Path) -> Path:
+            sbom = {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [
+                    {
+                        "type": "library",
+                        "name": "flask",
+                        "version": "3.0.0",
+                        "purl": "pkg:pypi/flask@3.0.0",
+                    }
+                ],
+                "dependencies": [
+                    {
+                        "ref": "demo-app",
+                        "dependsOn": ["pkg:pypi/flask@3.0.0"],
+                    }
+                ],
+            }
+            output_file.write_text(json.dumps(sbom), encoding="utf-8")
+            return output_file
+
+        monkeypatch.setattr(generate, "_generate_cdxgen_sbom", fake_cdxgen)
+        monkeypatch.setattr(generate, "_generate_syft_sbom", fake_syft)
+
+        generate.generate_from_dir(
+            project_dir,
+            merged_bom,
+            cdxgen_output=cdxgen_bom,
+            syft_output=syft_bom,
+        )
+
+        assert merged_bom.exists()
+        assert cdxgen_bom.exists()
+        assert syft_bom.exists()
+
+        data = json.loads(merged_bom.read_text(encoding="utf-8"))
+        assert data["metadata"]["component"]["name"] == "demo-app"
+        assert len(data["components"]) == 2
+
+        dependency_map = {
+            dep["ref"]: dep.get("dependsOn", [])
+            for dep in data["dependencies"]
+        }
+        assert set(dependency_map["demo-app"]) == {
+            "pkg:pypi/requests@2.31.0",
+            "pkg:pypi/flask@3.0.0",
+        }
+
+        property_names = {
+            prop["name"]
+            for component in data["components"]
+            for prop in component.get("properties", [])
+        }
+        assert "sbom_pipeline:generator:cdxgen" in property_names
+        assert "sbom_pipeline:generator:syft" in property_names
 
 
 # ---------------------------------------------------------------------------

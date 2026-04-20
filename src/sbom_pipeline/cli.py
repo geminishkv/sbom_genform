@@ -148,7 +148,10 @@ def _print_help_table() -> None:
     cmd_t.add_row("[bold green]format[/bold green]", "Форматирование готовых SBOM JSON → xlsx / docx / odt")
     cmd_t.add_row("[bold green]verify[/bold green]", "Проверка SHA-256 подписи SBOM  [dim]<файл>[/dim]")
     cmd_t.add_row("[bold green]info[/bold green]",   "Инспекция SBOM: компоненты, CVE по severity, подпись  [dim]<файл>[/dim]")
-    cmd_t.add_row("[bold green]status[/bold green]", "Проверка окружения: Trivy / Docker / Node.js / Python")
+    cmd_t.add_row(
+        "[bold green]status[/bold green]",
+        "Проверка окружения: Syft / Trivy / Docker / Node.js / Python",
+    )
     cmd_t.add_row("[bold green]diff[/bold green]",   "Сравнение двух SBOM: добавленные компоненты, новые CVE  [dim]<старый> <новый>[/dim]")
     cmd_t.add_row("[bold green]cert[/bold green]",   "Обогащение SBOM файла полями GOST:attack_surface, GOST:security_function  [dim]<файл>[/dim]")
     console.print(Panel(cmd_t, border_style="bright_black", padding=(0, 1)))
@@ -159,6 +162,8 @@ def _print_help_table() -> None:
     _opt_row(rt, "--url",             "",   "TEXT", "URL репозитория GitHub/GitLab",             "GIT_URL",        "")
     _opt_row(rt, "--token",           "",   "TEXT", "Токен доступа (ghp_... / glpat-...)",       "GIT_TOKEN",      "")
     _opt_row(rt, "--branch",          "",   "TEXT", "Ветка репозитория",                         "GIT_BRANCH",     "HEAD")
+    _opt_row(rt, "--cdxgen/--no-cdxgen", "", "",   "Генерировать SBOM через cdxgen",             "USE_CDXGEN",     "cdxgen")
+    _opt_row(rt, "--syft/--no-syft", "",   "",     "Генерировать SBOM через syft",               "USE_SYFT",       "syft")
     _opt_row(rt, "--output-dir",      "-o", "PATH", "Директория артефактов SBOM",                "OUTPUT_DIR",     "secgensbom_out")
     _opt_row(rt, "--reports-dir",     "",   "PATH", "Директория отчётов",                        "REPORTS_DIR",    "secgensbom_reports")
     _opt_row(rt, "--image",           "",   "TEXT", "Docker-образ для сканирования Clair",       "IMAGE_NAME",     "")
@@ -229,6 +234,16 @@ def cmd_run(
         help="Ветка (по умолчанию HEAD)",
         envvar="GIT_BRANCH",
     ),
+    cdxgen: bool = typer.Option(
+        True, "--cdxgen/--no-cdxgen",
+        help="Генерировать SBOM через cdxgen",
+        envvar="USE_CDXGEN",
+    ),
+    syft: bool = typer.Option(
+        True, "--syft/--no-syft",
+        help="Генерировать SBOM через syft",
+        envvar="USE_SYFT",
+    ),
     output_dir: Path = typer.Option(
         Path("secgensbom_out"), "--output-dir", "-o",
         help="Директория артефактов",
@@ -275,6 +290,8 @@ def cmd_run(
         cfg.git_token = token
     if branch:
         cfg.git_branch = branch
+    cfg.use_cdxgen = cdxgen
+    cfg.use_syft = syft
     cfg.output_dir = output_dir
     cfg.reports_dir = reports_dir
     cfg.image_name = image_name or cfg.image_name
@@ -486,6 +503,7 @@ def cmd_status() -> None:
     checks = [
         ("Python",       [sys.executable, "--version"]),
         ("pip",          [sys.executable, "-m", "pip", "--version"]),
+        ("Syft",         ["syft", "version"]),
         ("Trivy",        ["trivy", "--version"]),
         ("Docker",       ["docker", "--version"]),
         ("Node.js",      ["node", "--version"]),
@@ -499,6 +517,7 @@ def cmd_status() -> None:
     t.add_column("Версия / Детали")
 
     _install_hints: dict[str, str] = {
+        "Syft":         "brew install syft  /  https://github.com/anchore/syft",
         "Trivy":        "brew install trivy  /  https://aquasecurity.github.io/trivy",
         "Docker":       "https://docs.docker.com/get-docker/",
         "Node.js":      "brew install node  /  https://nodejs.org",

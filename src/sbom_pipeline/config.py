@@ -31,6 +31,10 @@ class PipelineConfig:
     git_token: Optional[str] = None
     git_branch: Optional[str] = None
 
+    # --- Генерация SBOM ---
+    use_cdxgen: bool = True
+    use_syft: bool = True
+
     # --- Пути ---
     output_dir: Path = field(default_factory=lambda: Path(SBOM_OUT_DIR))
     reports_dir: Path = field(default_factory=lambda: Path(REPORTS_DIR))
@@ -81,10 +85,15 @@ class PipelineConfig:
 
         return cls(
             source=os.getenv("SOURCE", "local"),
-            project_dir=_path("PROJECT_DIR", "examples/project_inject") or Path("examples/project_inject"),
+            project_dir=(
+                _path("PROJECT_DIR", "examples/project_inject")
+                or Path("examples/project_inject")
+            ),
             git_url=os.getenv("GIT_URL") or None,
             git_token=os.getenv("GIT_TOKEN") or None,
             git_branch=os.getenv("GIT_BRANCH") or None,
+            use_cdxgen=os.getenv("USE_CDXGEN", "true").lower() in ("true", "1", "yes"),
+            use_syft=os.getenv("USE_SYFT", "true").lower() in ("true", "1", "yes"),
             output_dir=_path("OUTPUT_DIR", SBOM_OUT_DIR) or Path(SBOM_OUT_DIR),
             reports_dir=_path("REPORTS_DIR", REPORTS_DIR) or Path(REPORTS_DIR),
             host_project_dir=_path("HOST_PROJECT_DIR"),
