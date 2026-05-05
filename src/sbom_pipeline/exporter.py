@@ -84,20 +84,23 @@ class Exporter:
     # Excel
     # ------------------------------------------------------------------
 
-    def exportToExcel(self, report: str) -> None:
+    def exportToExcel(
+        self,
+        report: str,
+        include_components: bool = True,
+        include_vulns: bool = True,
+    ) -> None:
         path = Path(report)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             vuln_columns = self._vuln_columns()
             with pd.ExcelWriter(str(path), engine="openpyxl") as writer:
-                # Лист 1: Компоненты
-                comp_df = pd.DataFrame(self._comp_rows(), columns=_COMP_COLUMNS)
-                comp_df.to_excel(writer, index=False, sheet_name="Компоненты")
-
-                # Лист 2: Уязвимости
-                vuln_df = pd.DataFrame(self._vuln_rows(), columns=vuln_columns)
-                vuln_df.to_excel(writer, index=False, sheet_name="Уязвимости")
-
+                if include_components:
+                    comp_df = pd.DataFrame(self._comp_rows(), columns=_COMP_COLUMNS)
+                    comp_df.to_excel(writer, index=False, sheet_name="Компоненты")
+                if include_vulns:
+                    vuln_df = pd.DataFrame(self._vuln_rows(), columns=vuln_columns)
+                    vuln_df.to_excel(writer, index=False, sheet_name="Уязвимости")
             self._write_sig(path)
             logging.info(f"[exporter] Excel → {path}")
         except Exception as e:
@@ -107,32 +110,36 @@ class Exporter:
     # Word (.docx)
     # ------------------------------------------------------------------
 
-    def exportToDocx(self, report: str) -> None:
+    def exportToDocx(
+        self,
+        report: str,
+        include_components: bool = True,
+        include_vulns: bool = True,
+    ) -> None:
         path = Path(report)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             doc = Document()
             doc.add_heading("Отчёт по компонентам SBOM", level=1)
 
-            # --- Таблица компонентов ---
-            doc.add_heading("Компоненты", level=2)
-            comp_rows = self._comp_rows()
-            t = doc.add_table(rows=1 + len(comp_rows), cols=len(_COMP_COLUMNS))
-            t.style = "Table Grid"
-            # Заголовок
-            for i, col in enumerate(_COMP_COLUMNS):
-                cell = t.rows[0].cells[i]
-                cell.text = col
-                for run in cell.paragraphs[0].runs:
-                    run.bold = True
-                    run.font.size = Pt(9)
-            # Данные
-            for r_idx, row in enumerate(comp_rows, start=1):
-                for c_idx, val in enumerate(row.values()):
-                    t.rows[r_idx].cells[c_idx].text = str(val)
+            if include_components:
+                # --- Таблица компонентов ---
+                doc.add_heading("Компоненты", level=2)
+                comp_rows = self._comp_rows()
+                t = doc.add_table(rows=1 + len(comp_rows), cols=len(_COMP_COLUMNS))
+                t.style = "Table Grid"
+                for i, col in enumerate(_COMP_COLUMNS):
+                    cell = t.rows[0].cells[i]
+                    cell.text = col
+                    for run in cell.paragraphs[0].runs:
+                        run.bold = True
+                        run.font.size = Pt(9)
+                for r_idx, row in enumerate(comp_rows, start=1):
+                    for c_idx, val in enumerate(row.values()):
+                        t.rows[r_idx].cells[c_idx].text = str(val)
 
-            # --- Таблица уязвимостей ---
-            if self.vulns:
+            if include_vulns and self.vulns:
+                # --- Таблица уязвимостей ---
                 doc.add_heading("Уязвимости", level=2)
                 vuln_columns = self._vuln_columns()
                 vuln_rows = self._vuln_rows()
@@ -148,7 +155,6 @@ class Exporter:
                     for c_idx, val in enumerate(row.values()):
                         cell = vt.rows[r_idx].cells[c_idx]
                         cell.text = str(val)
-                        # Подсветка критичности
                         if vuln_columns[c_idx] == _SEVERITY_COLUMN:
                             color = _SEVERITY_COLORS.get(str(val).upper(), _SEVERITY_COLORS["UNKNOWN"])
                             for run in cell.paragraphs[0].runs:
@@ -165,7 +171,12 @@ class Exporter:
     # ODT
     # ------------------------------------------------------------------
 
-    def exportToOdt(self, report: str) -> None:
+    def exportToOdt(
+        self,
+        report: str,
+        include_components: bool = True,
+        include_vulns: bool = True,
+    ) -> None:
         path = Path(report)
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -180,12 +191,13 @@ class Exporter:
             cell_style.addElement(TableCellProperties(border="0.05pt solid #808080"))
             doc.styles.addElement(cell_style)
 
-            # --- Таблица компонентов ---
-            doc.text.addElement(P(text="Компоненты", stylename=title_style))
-            doc.text.addElement(self._make_odt_table("SBOM_Components", _COMP_COLUMNS, self._comp_rows(), cell_style))
+            if include_components:
+                # --- Таблица компонентов ---
+                doc.text.addElement(P(text="Компоненты", stylename=title_style))
+                doc.text.addElement(self._make_odt_table("SBOM_Components", _COMP_COLUMNS, self._comp_rows(), cell_style))
 
-            # --- Таблица уязвимостей ---
-            if self.vulns:
+            if include_vulns and self.vulns:
+                # --- Таблица уязвимостей ---
                 doc.text.addElement(P(text="Уязвимости", stylename=title_style))
                 doc.text.addElement(
                     self._make_odt_table(

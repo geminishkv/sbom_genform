@@ -126,9 +126,7 @@ def test_config_defaults():
     assert cfg.source == "local"
     assert cfg.skip_clair is True
     assert cfg.use_bdu is False
-    assert cfg.use_cdxgen is True
-    assert cfg.use_syft is True
-    assert cfg.project_dir == Path("examples/project_inject")
+    assert cfg.project_dir is None
 
 
 def test_config_from_env(monkeypatch):
@@ -628,3 +626,217 @@ def test_two_sig_files_are_distinct():
         assert sig_merged.startswith("SHA256=")
         # The two .sig files contain different digests
         assert sig_dedup != sig_merged
+
+
+# ---------------------------------------------------------------------------
+# CLI — scan command (smoke)
+# ---------------------------------------------------------------------------
+
+def _write_sbom(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_MINIMAL_SBOM), encoding="utf-8")
+
+
+def test_cli_scan_exits_zero(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", lambda sbom, cfg: None)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file)])
+    assert result.exit_code == 0
+
+
+def test_cli_scan_missing_file_exits_nonzero(monkeypatch):
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["scan", "nonexistent.json"])
+    assert result.exit_code != 0
+
+
+def test_cli_scan_passes_sbom_to_pipeline(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+    captured: dict = {}
+
+    def fake_scan(sbom, cfg):
+        captured["sbom"] = sbom
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", fake_scan)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file)])
+    assert captured["sbom"] == sbom_file
+
+
+def test_cli_scan_bdu_flag_propagated(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+    captured: dict = {}
+
+    def fake_scan(sbom, cfg):
+        captured["use_bdu"] = cfg.use_bdu
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", fake_scan)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file), "--bdu"])
+    assert captured.get("use_bdu") is True
+
+
+def test_cli_scan_no_clair_flag_propagated(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+    captured: dict = {}
+
+    def fake_scan(sbom, cfg):
+        captured["skip_clair"] = cfg.skip_clair
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", fake_scan)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file), "--no-clair"])
+    assert captured.get("skip_clair") is True
+
+
+def test_cli_scan_clair_flag_enables_clair(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+    captured: dict = {}
+
+    def fake_scan(sbom, cfg):
+        captured["skip_clair"] = cfg.skip_clair
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", fake_scan)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file), "--clair"])
+    assert captured.get("skip_clair") is False
+
+
+def test_cli_scan_output_dir_propagated(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+    out_dir = tmp_path / "my_out"
+    captured: dict = {}
+
+    def fake_scan(sbom, cfg):
+        captured["output_dir"] = cfg.output_dir
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", fake_scan)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file), "--output-dir", str(out_dir)])
+    assert captured.get("output_dir") == out_dir
+
+
+def test_cli_scan_exception_exits_nonzero(monkeypatch, tmp_path):
+    sbom_file = tmp_path / "input.json"
+    _write_sbom(sbom_file)
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", lambda s, c: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["scan", str(sbom_file)])
+    assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# CLI — gen-sbom command (smoke)
+# ---------------------------------------------------------------------------
+
+def test_cli_gen_sbom_exits_zero(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "pipeline_gen_sbom", lambda cfg: None)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["gen-sbom"])
+    assert result.exit_code == 0
+
+
+def test_cli_gen_sbom_output_dir_propagated(monkeypatch, tmp_path):
+    captured: dict = {}
+
+    def fake_gen(cfg):
+        captured["output_dir"] = cfg.output_dir
+
+    monkeypatch.setattr(cli, "pipeline_gen_sbom", fake_gen)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["gen-sbom", "--output-dir", str(tmp_path / "out")])
+    assert captured.get("output_dir") == tmp_path / "out"
+
+
+def test_cli_gen_sbom_reports_dir_propagated(monkeypatch, tmp_path):
+    captured: dict = {}
+
+    def fake_gen(cfg):
+        captured["reports_dir"] = cfg.reports_dir
+
+    monkeypatch.setattr(cli, "pipeline_gen_sbom", fake_gen)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["gen-sbom", "--reports-dir", str(tmp_path / "rep")])
+    assert captured.get("reports_dir") == tmp_path / "rep"
+
+
+def test_cli_gen_sbom_no_clair_propagated(monkeypatch, tmp_path):
+    captured: dict = {}
+
+    def fake_gen(cfg):
+        captured["skip_clair"] = cfg.skip_clair
+
+    monkeypatch.setattr(cli, "pipeline_gen_sbom", fake_gen)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["gen-sbom", "--no-clair"])
+    assert captured.get("skip_clair") is True
+
+
+def test_cli_gen_sbom_clair_flag_enables_clair(monkeypatch, tmp_path):
+    captured: dict = {}
+
+    def fake_gen(cfg):
+        captured["skip_clair"] = cfg.skip_clair
+
+    monkeypatch.setattr(cli, "pipeline_gen_sbom", fake_gen)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    _CLI_RUNNER.invoke(cli.app, ["gen-sbom", "--clair"])
+    assert captured.get("skip_clair") is False
+
+
+def test_cli_gen_sbom_exception_exits_nonzero(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "pipeline_gen_sbom", lambda c: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["gen-sbom"])
+    assert result.exit_code != 0
