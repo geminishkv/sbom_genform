@@ -42,13 +42,13 @@
 
 ## Main CLI
 
-![mainhelp](assets/help_main.jpg)
+![mainhelp](assets/gifs/help_main.gif)
 
 ***
 
 ## Run help
 
-![runhelp](assets/runhelp.png)
+![runhelp](assets/gifs/help_run.gif)
 
 ***
 
@@ -76,6 +76,16 @@ python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+**Запуск**
+
+```bash
+secsbom run  # локальный демо-проект                                                                                                                                                                                                                 │
+secsbom run --path ./myproject                                                                                                                                                                                                                       │
+secsbom run --url https://github.com/org/repo --token ghp_...                                                                                                                                                                                        │
+secsbom run --url https://gitlab.com/org/repo --token glpat-...
+```
+
+![run_visualisation](assets/gifs/cdxgen.gif)
 ***
 
 ## Выходные артефакты
