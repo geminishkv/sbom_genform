@@ -474,9 +474,13 @@ def format_sboms(sbom_dir: Path, reports_dir: Path) -> None:
         logging.warning(f"[format] Не найдено SBOM в {sbom_dir}")
         return
 
+    processed = 0
     for sbom_path in handler.sboms_list:
         sbom_data = handler.readJson(sbom_path)
         if sbom_data is None:
+            continue
+        if not _is_cyclonedx_sbom(sbom_data):
+            logging.info(f"[format] Пропущен не-SBOM JSON: {sbom_path}")
             continue
         deps = _extract_dependencies(sbom_data, str(sbom_path))
         stem = sbom_path.stem
@@ -484,13 +488,22 @@ def format_sboms(sbom_dir: Path, reports_dir: Path) -> None:
         exporter.exportToExcel(str(reports_dir / EXCEL_DIR / f"{stem}{EXCEL_EXTENSION}"))
         exporter.exportToDocx(str(reports_dir / DOCX_DIR / f"{stem}{DOCX_EXTENSION}"))
         exporter.exportToOdt(str(reports_dir / ODT_DIR / f"{stem}{ODT_EXTENSION}"))
+        processed += 1
 
-    logging.info(f"[format] Обработано {len(handler.sboms_list)} SBOM")
+    logging.info(f"[format] Обработано {processed} SBOM")
 
 
 # ------------------------------------------------------------------
 # Внутренние функции
 # ------------------------------------------------------------------
+
+def _is_cyclonedx_sbom(data: Any) -> bool:
+    return (
+        isinstance(data, dict)
+        and data.get("bomFormat") == "CycloneDX"
+        and isinstance(data.get("components", []), list)
+    )
+
 
 def _export_reports(
     sbom_data: Dict[str, Any],

@@ -15,6 +15,7 @@ from sbom_pipeline.config import PipelineConfig
 from sbom_pipeline.constants import SIGNED_DEDUP_BOM_FILE, SIGNED_BOM_FILE
 from sbom_pipeline.dedup import dedup_sbom, dedup_vulns
 from sbom_pipeline.exporter import Exporter
+from sbom_pipeline.pipeline import format_sboms
 from sbom_pipeline.sign import sign_sbom, verify_sbom
 from sbom_pipeline.vuln_merger import VulnFinding, merge_vulns_into_sbom
 
@@ -532,6 +533,25 @@ def test_dedup_vulns_no_cross_match_purl_vs_nopurl():
     # Different keys → both kept (purl vs name@version)
     result = dedup_vulns([f1, f2])
     assert len(result) == 2
+
+
+def test_format_sboms_skips_non_sbom_json():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        sbom_dir = p / "secgensbom_out"
+        reports_dir = p / "secgensbom_reports"
+        sbom_dir.mkdir()
+
+        (sbom_dir / "app-bom.json").write_text(json.dumps(_MINIMAL_SBOM), encoding="utf-8")
+        (sbom_dir / "vulns-normalized.json").write_text(
+            json.dumps([{"cve_id": "CVE-2026-0001"}]),
+            encoding="utf-8",
+        )
+
+        format_sboms(sbom_dir, reports_dir)
+
+        assert (reports_dir / "excel" / "app-bom.xlsx").exists()
+        assert not (reports_dir / "excel" / "vulns-normalized.xlsx").exists()
 
 
 # ---------------------------------------------------------------------------
