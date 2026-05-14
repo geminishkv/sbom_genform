@@ -649,66 +649,167 @@ def cmd_diff(
 # ---------------------------------------------------------------------------
 # cert — обогащение полями
 # ---------------------------------------------------------------------------
-def add_gost_cert_fields(sbom_path: Path, add_cert: bool = False) -> Path:
-    """Добавить GOST поля в каждый компонент."""
-    if not add_cert:
-        return sbom_path
+from typing import Optional, Literal
+from datetime import datetime, timezone
+import typer
+from pathlib import Path
+import json
+import logging
 
-    import json
-    import logging
+# Допустимые типы компонентов согласно ФСТЭК
+ComponentType = Literal["application", "framework", "library", "operating-system", "device-driver", "firmware"]
 
+def add_gost_cert_fields(sbom_path: Path, component_name: Optional[str] = None, component_version: Optional[str] = None,
+component_manufacturer: Optional[str] = None, component_type: ComponentType = "application") -> Path:
+   
+    """Переработка структуры отчета согласно требованиям информационного сообщения ФСТЭК России
+    от 13 января 2025 г. N 240/24/38."""
+    
     with open(sbom_path, 'r', encoding='utf-8') as f:
         sbom = json.load(f)
+    
+    if "metadata" not in sbom:
+        sbom["metadata"] = {}
+    
+    sbom["metadata"]["timestamp"] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    
+    # Новая блок
+    component_data = {
+        "type": component_type,
+        "name": component_name or "",
+        "version": component_version or ""
+    }
 
+    if component_manufacturer:
+        component_data["manufacturer"] = {"name": component_manufacturer}
+    
+    sbom["metadata"]["component"] = component_data
+    
+    # порядок полей
+    if "metadata" in sbom:
+        ordered_metadata = {}
+        
+        if "timestamp" in sbom["metadata"]:
+            ordered_metadata["timestamp"] = sbom["metadata"]["timestamp"]
+        
+        if "component" in sbom["metadata"]:
+            ordered_metadata["component"] = sbom["metadata"]["component"]
+        
+        for key, value in sbom["metadata"].items():
+            if key not in ["timestamp", "component"]:
+                ordered_metadata[key] = value
+        
+        sbom["metadata"] = ordered_metadata
+    
+    if "manufacturer" in sbom:
+        del sbom["manufacturer"]
+    
     components = sbom.get("components", [])
-    if not components:
-        return sbom_path
-
-    gost_properties =[
-        {"name": "GOST:attack_surface", "value": "no"},
-        {"name": "GOST:security_function", "value": "no"}
-    ]
-
-    updated = 0
-    for component in components:
-        props = component.get("properties", [])
-        component["properties"] = props + gost_properties
-        updated += 1
-
+    
+    if components:
+        updated = 0
+        for component in components:
+            properties = component.get("properties", [])
+            # Проверяем отсутствие GOST namespace
+            has_namespace = any(
+                isinstance(p, dict) and p.get("name") == "namespace" and p.get("value") == "GOST" 
+                for p in properties
+            )
+            if not has_namespace:
+                #  формат properties по ФСТЭК
+                gost_properties_list = [
+                    {"name": "GOST: attack_surface", "value": "no"},
+                    {"name": "GOST: security_function", "value": "no"}
+                ]
+                component["properties"] = properties + gost_properties_list
+                updated += 1
+        
+        if updated % 10 == 1 and updated % 100 != 11:
+            logging.info(f"Поля добавлены в {updated} компонент")
+        elif updated % 10 in (2, 3, 4) and updated % 100 not in (12, 13, 14):
+            logging.info(f"Поля добавлены в {updated} компонента")
+        else:
+            logging.info(f"Поля добавлены в {updated} компонентов")
+    
     cert_path = Path(str(sbom_path).replace('.json', '(cert).json'))
     cert_path.parent.mkdir(parents=True, exist_ok=True)
-
+    
     with open(cert_path, 'w', encoding='utf-8') as f:
         json.dump(sbom, f, indent=2, ensure_ascii=False)
-
-    last_digit = updated % 10
-    if updated > 20 and last_digit in (2, 3, 4):
-        logging.info(f"GOST поля добавлены в {updated} компонента → {cert_path}")
-    else:
-        logging.info(f"GOST поля добавлены в {updated} компонентов → {cert_path}")
+    
+    logging.info(f"SBOM обогащён → {cert_path}")
     return cert_path
+
 
 @app.command("cert", context_settings={"help_option_names": ["-h", "--help"]})
 def cmd_cert(
     sbom: Path = typer.Argument(None, help="Путь к SBOM JSON файлу"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Выходной файл (по умолчанию: PATH(cert).json)")
+    
+    # Данные для component
+    component_name: Optional[str] = typer.Option(
+        None,
+        "--component-name",
+        "-n",
+        help="Название продукта (добавляется в metadata.component)"
+    ),
+    component_version: Optional[str] = typer.Option(
+        None,
+        "--component-version",
+        "-v",
+        help="Версия продукта (добавляется в metadata.component)"
+    ),
+    manufacturer: Optional[str] = typer.Option(
+        None,
+        "--manufacturer",
+        "-m",
+        help="Производитель продукта (добавляется в metadata.component.manufacturer.name)"
+    ),
+    component_type: ComponentType = typer.Option(
+        "application",
+        "--component-type",
+        "-t",
+        help="Тип компонента (application, framework, library, operating-system, device-driver, firmware)"
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Выходной файл (по умолчанию: <input>(cert).json)"
+    )
 ) -> None:
-    """Добавление полей GOST:attack_surface, GOST:security_function во все компоненты (по умолчанию: value = "no")."""
+    
     _print_banner()
     setup_logging()
-
+    
+    # Обработка ошибок
     if not sbom.exists():
         console.print(f"[bold red]✗ SBOM файл не найден:[/bold red] {sbom}")
+        console.print(" [dim]Пример: secsbom cert sbom.json --component-name 'МЭ' --component-version '72.15' --manufacturer 'ООО Ромашка'[/dim]")
         raise typer.Exit(code=1)
+    
+    if sbom.stem.endswith("(cert)"):
+        console.print(f"[bold red]✗ Файл уже обогащен ✗[/bold red]")
+        raise typer.Exit(code=1)
+    
 
+    if not component_name or not component_version:
+        console.print("[bold yellow]⚠ Предупреждение:[/bold yellow] Рекомендуется указать --component-name и --component-version")
+    
     try:
-        cert_sbom = add_gost_cert_fields(sbom, add_cert=True)
+        cert_sbom = add_gost_cert_fields(
+            sbom, 
+            component_name=component_name,
+            component_version=component_version,
+            component_manufacturer=manufacturer,
+            component_type=component_type
+        )
     except Exception as e:
-        console.print(f"[bold red]✗ Ошибка добавления полей:[/bold red] {e}")
+        console.print(f"[bold red]✗ Ошибка добавления полей ✗[/bold red] {e}")
         raise typer.Exit(code=1)
-
-    output_path = output or cert_sbom  # Используем путь из utils если --output не указан
-    console.print(f"[bold green]✓ Поля успешно добавлены в properties:[/bold green] {output_path}")
+    
+    output_path = output or cert_sbom
+    console.print(f"[bold green]✓ Поля успешно добавлены ✓ [/bold green]")
+    console.print(f"[dim]→ Результат: {output_path}[/dim]")
     _print_footer()
 
 # ---------------------------------------------------------------------------
