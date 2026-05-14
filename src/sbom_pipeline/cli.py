@@ -834,18 +834,27 @@ def cmd_diff(
 # ---------------------------------------------------------------------------
 # cert — обогащение полями
 # ---------------------------------------------------------------------------
-from typing import Optional, Literal
+from typing import Optional
+from enum import Enum
 from datetime import datetime, timezone
 import typer
 from pathlib import Path
 import json
 import logging
 
-# Допустимые типы компонентов согласно ФСТЭК
-ComponentType = Literal["application", "framework", "library", "operating-system", "device-driver", "firmware"]
+
+class ComponentType(str, Enum):
+    """Допустимые типы компонентов согласно ФСТЭК."""
+
+    application = "application"
+    framework = "framework"
+    library = "library"
+    operating_system = "operating-system"
+    device_driver = "device-driver"
+    firmware = "firmware"
 
 def add_gost_cert_fields(sbom_path: Path, component_name: Optional[str] = None, component_version: Optional[str] = None,
-component_manufacturer: Optional[str] = None, component_type: ComponentType = "application") -> Path:
+component_manufacturer: Optional[str] = None, component_type: ComponentType = ComponentType.application) -> Path:
    
     """Переработка структуры отчета согласно требованиям информационного сообщения ФСТЭК России
     от 13 января 2025 г. N 240/24/38."""
