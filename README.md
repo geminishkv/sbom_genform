@@ -27,6 +27,7 @@
 </div>
 
 Инструмент для безопасной генерации, анализа и форматирования **Software Bill of Materials (SBOM)**.
+![runhelp](assets/gifs/full.gif)
 
 **Что делает:**
 
