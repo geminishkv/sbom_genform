@@ -2,14 +2,14 @@
 Оркестратор SBOM-пайплайна.
 
 Шаги:
-  1. Генерация SBOM + обогащение пакетами из Clair  (generate.py, scanner/clair.py)
-  2. Дедупликация компонентов                       (dedup.py)  ← объединяет cdxgen + Clair
-  3. Подпись SBOM без уязвимостей                   (sign.py)  → app-bom-dedup-signed.json
-  4. Сканирование уязвимостей                       (scanner/trivy, depcheck, clair — повторное использование отчёта)
-  5. Дедупликация уязвимостей                       (dedup.py)
-  6. Слияние уязв. в SBOM                           (vuln_merger.py)
-  7. Подпись SBOM с уязвимостями                    (sign.py)  → merged-bom-signed.json
-  8. Экспорт отчётов                                (exporter.py)
+  1. Генерация SBOM через cdxgen + syft + обогащение пакетами из Clair  (generate.py, scanner/clair.py)
+  2. Дедупликация компонентов                                           (dedup.py)  ← объединяет cdxgen + syft + Clair
+  3. Подпись SBOM без уязвимостей                                       (sign.py)  → app-bom-dedup-signed.json
+  4. Сканирование уязвимостей                                           (scanner/trivy, depcheck, clair — повторное использование отчёта)
+  5. Дедупликация уязвимостей                                           (dedup.py)
+  6. Слияние уязв. в SBOM                                               (vuln_merger.py)
+  7. Подпись SBOM с уязвимостями                                        (sign.py)  → merged-bom-signed.json
+  8. Экспорт отчётов                                                    (exporter.py)
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ from typing import Any, Dict, List, Optional
 from .config import PipelineConfig
 from .constants import (
     APP_BOM_FILE,
+    APP_BOM_CDXGEN_FILE,
+    APP_BOM_SYFT_FILE,
     DEDUP_BOM_FILE,
     SIGNED_DEDUP_BOM_FILE,
     SIGNED_BOM_FILE,
@@ -45,10 +47,15 @@ def run(cfg: PipelineConfig) -> None:
     """Запустить полный пайплайн."""
     cfg.ensure_output_dirs()
 
+    if not cfg.use_cdxgen and not cfg.use_syft:
+        raise ValueError("Нужно включить хотя бы один генератор SBOM: cdxgen или syft.")
+
     # ------------------------------------------------------------------
     # 1. Генерация SBOM
     # ------------------------------------------------------------------
     app_bom = cfg.output_dir / APP_BOM_FILE
+    cdxgen_bom = cfg.output_dir / APP_BOM_CDXGEN_FILE
+    syft_bom = cfg.output_dir / APP_BOM_SYFT_FILE
 
     if cfg.source in ("github", "gitlab"):
         if not cfg.git_url:
@@ -61,10 +68,21 @@ def run(cfg: PipelineConfig) -> None:
             output_file=app_bom,
             token=cfg.git_token,
             branch=cfg.git_branch,
+            use_cdxgen=cfg.use_cdxgen,
+            use_syft=cfg.use_syft,
+            cdxgen_output=cdxgen_bom,
+            syft_output=syft_bom,
         )
     else:
         logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
-        generate.generate_from_dir(cfg.project_dir, app_bom)
+        generate.generate_from_dir(
+            cfg.project_dir,
+            app_bom,
+            use_cdxgen=cfg.use_cdxgen,
+            use_syft=cfg.use_syft,
+            cdxgen_output=cdxgen_bom,
+            syft_output=syft_bom,
+        )
 
     # Clair: получить пакеты образа и добавить их в SBOM.
     # Уязвимости на этом этапе не разбираются — отчёт будет повторно
