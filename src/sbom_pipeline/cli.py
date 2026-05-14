@@ -834,7 +834,7 @@ def cmd_diff(
 # ---------------------------------------------------------------------------
 # cert — обогащение полями
 # ---------------------------------------------------------------------------
-from typing import Optional
+from typing import Any, Optional
 from enum import Enum
 from datetime import datetime, timezone
 import typer
@@ -868,7 +868,7 @@ component_manufacturer: Optional[str] = None, component_type: ComponentType = Co
     sbom["metadata"]["timestamp"] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     
     # Новая блок
-    component_data = {
+    component_data: dict[str, Any] = {
         "type": component_type,
         "name": component_name or "",
         "version": component_version or ""
