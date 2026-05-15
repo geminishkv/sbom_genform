@@ -24,6 +24,8 @@ from .constants import (
     APP_BOM_FILE,
     APP_BOM_CDXGEN_FILE,
     APP_BOM_SYFT_FILE,
+    CYCLONEDX_FORMAT,
+    CYCLONEDX_SPEC_VERSION,
     DEDUP_BOM_FILE,
     SIGNED_DEDUP_BOM_FILE,
     SIGNED_BOM_FILE,
@@ -43,6 +45,237 @@ from .exporter import Exporter
 from .sbom_handler import SbomHandler
 
 
+def _write_empty_sbom(path: Path, image_name: str) -> None:
+    """Создать минимальный пустой SBOM CycloneDX (для режима только-образ)."""
+    data: Dict[str, Any] = {
+        "bomFormat": CYCLONEDX_FORMAT,
+        "specVersion": CYCLONEDX_SPEC_VERSION,
+        "components": [],
+        "metadata": {
+            "component": {
+                "type": "container",
+                "name": image_name,
+            }
+        },
+    }
+    SbomHandler.write_json(data, path)
+
+
+def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
+    """Сканирование уязвимостей для готового SBOM (шаги 4–8).
+
+    Шаги: 
+        1. Сканирование
+            Используется переданный *sbom_path*.
+            Включает Clair-сканирование образа (если настроено), Trivy по файловой системе и по SBOM, Dependency-Check.
+        2. Дедупликация уязвимостей
+        3. Слияние уязвимостей в SBOM
+        4. Подпись SBOM с уязвимостями
+        5. Экспорт отчётов (только листы уязвимостей)
+    """
+    cfg.ensure_output_dirs()
+
+    # ------------------------------------------------------------------
+    # 1. Сканирование уязвимостей
+    # ------------------------------------------------------------------
+    all_findings: List[VulnFinding] = []
+
+    # Clair: запустить сканирование и разобрать уязвимости из отчёта.
+    if not cfg.skip_clair and not cfg.image_name:
+        logging.warning(
+            "[clair] SKIP_CLAIR=false, но IMAGE_NAME не задан — "
+            "сканирование Clair пропущено. "
+            "Укажите переменную окружения IMAGE_NAME=<image>:<tag>."
+        )
+    _clair_report_file: Optional[Path] = None
+    if not cfg.skip_clair and cfg.image_name:
+        _clair_report_file = clair.run_scan_report(
+            image_name=cfg.image_name,
+            output_dir=cfg.clair_dir,
+            clair_endpoint=cfg.clair_endpoint,
+        )
+        if _clair_report_file is not None:
+            all_findings += clair.parse_report_findings(
+                report_file=_clair_report_file,
+                clair_endpoint=cfg.clair_endpoint,
+                nvd_api_key=cfg.nvd_api_key or "",
+            )
+
+    # Trivy — filesystem (только если project_dir задан явно)
+    if cfg.project_dir is not None:
+        all_findings += trivy.scan_filesystem(
+            project_dir=cfg.project_dir,
+            output_dir=cfg.trivy_dir,
+        )
+    else:
+        logging.info("[pipeline] project_dir не задан — Trivy FS пропущен")
+    # Trivy — по SBOM
+    all_findings += trivy.scan_sbom(
+        sbom_path=sbom_path,
+        output_dir=cfg.trivy_dir,
+    )
+    # Dependency-Check (только если project_dir задан явно)
+    if cfg.project_dir is not None:
+        all_findings += depcheck.scan(
+            project_dir=cfg.project_dir,
+            output_dir=cfg.depcheck_dir,
+            data_dir=cfg.dep_check_data or Path(".dependency-check-data"),
+            host_project_dir=cfg.host_project_dir,
+            host_output_dir=cfg.host_dep_report_dir,
+            host_data_dir=cfg.host_dep_check_data,
+            nvd_api_key=cfg.nvd_api_key,
+        )
+    else:
+        logging.info("[pipeline] project_dir не задан — Dependency-Check пропущен")
+
+    logging.info(f"[pipeline] Всего уязвимостей из всех сканеров: {len(all_findings)}")
+
+    # Cross-populate CVSS scores
+    _cve_score: Dict[str, float] = {}
+    for _f in all_findings:
+        if _f.cvss_score and _f.cve_id not in _cve_score:
+            _cve_score[_f.cve_id] = _f.cvss_score
+        elif _f.cvss_score and _f.cvss_score > _cve_score.get(_f.cve_id, 0.0):
+            _cve_score[_f.cve_id] = _f.cvss_score
+    _filled = 0
+    for _f in all_findings:
+        if _f.cvss_score == 0.0 and _f.cve_id in _cve_score:
+            _f.cvss_score = _cve_score[_f.cve_id]
+            _filled += 1
+    if _filled:
+        logging.info(f"[pipeline] CVSS cross-populated для {_filled} уязвимостей")
+
+    # ------------------------------------------------------------------
+    # 2. Дедупликация уязвимостей
+    # ------------------------------------------------------------------
+    all_findings = dedup.dedup_vulns(all_findings)
+
+    # ------------------------------------------------------------------
+    # 3. Слияние уязвимостей в SBOM
+    # ------------------------------------------------------------------
+    with open(sbom_path, encoding="utf-8") as f:
+        sbom_data: Dict[str, Any] = json.load(f)
+
+    if all_findings:
+        sbom_data = merge_vulns_into_sbom(
+            sbom_data,
+            all_findings,
+            enable_bdu=cfg.use_bdu,
+        )
+        save_vuln_report(all_findings, cfg.output_dir / "vulns-normalized.json")
+
+    # ------------------------------------------------------------------
+    # 4. Подпись SBOM с уязвимостями
+    # ------------------------------------------------------------------
+    signed_bom = cfg.output_dir / SIGNED_BOM_FILE
+    SbomHandler.write_json(sbom_data, signed_bom)
+    sign.sign_sbom(signed_bom, signed_bom)
+
+    logging.info(f"[pipeline] SBOM с уязвимостями: {signed_bom}")
+
+    # ------------------------------------------------------------------
+    # 5. Экспорт отчётов (только листы уязвимостей)
+    # ------------------------------------------------------------------
+    logging.info("[pipeline] Экспорт отчётов уязвимостей...")
+    _export_reports(sbom_data, all_findings, cfg, include_components=False)
+
+    logging.info("[pipeline] Сканирование завершено.")
+
+
+def gen_sbom(cfg: PipelineConfig) -> None:
+    """Генерация SBOM (шаги 1–3) + экспорт листа компонентов (шаг 8).
+
+    Шаги:
+        1. Генерация SBOM из источника + обогащение пакетами Clair (если настроено).
+        2. Дедупликация компонентов.
+        3. Подпись SBOM без уязвимостей → app-bom-dedup-signed.json.
+        4. Экспорт отчётов (только лист компонентов).
+    """
+    cfg.ensure_output_dirs()
+
+    # ------------------------------------------------------------------
+    # 1. Генерация SBOM
+    # ------------------------------------------------------------------
+    app_bom = cfg.output_dir / APP_BOM_FILE
+
+    _has_code = cfg.project_dir is not None or cfg.git_url is not None
+    _has_image = not cfg.skip_clair and bool(cfg.image_name)
+
+    if not _has_code and not _has_image:
+        raise ValueError(
+            "Не задан ни один источник. Укажите --path/--url (исходный код) "
+            "и/или --image --clair (образ контейнера)."
+        )
+
+    if _has_code:
+        if cfg.source in ("github", "gitlab"):
+            if not cfg.git_url:
+                raise ValueError(f"--url обязателен для source={cfg.source}")
+            logging.info(f"[pipeline] Источник: {cfg.source} → {cfg.git_url}")
+            generate.generate_from_git(
+                url=cfg.git_url,
+                output_file=app_bom,
+                token=cfg.git_token,
+                branch=cfg.git_branch,
+            )
+        else:
+            logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
+            assert cfg.project_dir is not None
+            generate.generate_from_dir(cfg.project_dir, app_bom)
+    else:
+        # Режим только-образ: создать пустой SBOM-каркас для обогащения Clair
+        logging.info("[pipeline] Исходный код не задан — создан пустой SBOM для образа")
+        assert cfg.image_name is not None
+        _write_empty_sbom(app_bom, cfg.image_name)
+
+    if not cfg.skip_clair and not cfg.image_name:
+        logging.warning(
+            "[clair] SKIP_CLAIR=false, но IMAGE_NAME не задан — "
+            "обогащение Clair пропущено. "
+            "Укажите переменную окружения IMAGE_NAME=<image>:<tag>."
+        )
+    if not cfg.skip_clair and cfg.image_name:
+        _clair_report_file = clair.run_scan_report(
+            image_name=cfg.image_name,
+            output_dir=cfg.clair_dir,
+            clair_endpoint=cfg.clair_endpoint,
+        )
+        if _clair_report_file is not None:
+            with open(app_bom, encoding="utf-8") as _fh:
+                _app_bom_data = json.load(_fh)
+            _app_bom_data = clair.enrich_sbom_with_clair_packages(
+                _app_bom_data,
+                _clair_report_file,
+                image_name=cfg.image_name,
+            )
+            SbomHandler.write_json(_app_bom_data, app_bom)
+            logging.info(f"[pipeline] SBOM обогащён пакетами из Clair → {app_bom}")
+
+    # ------------------------------------------------------------------
+    # 2. Дедупликация компонентов
+    # ------------------------------------------------------------------
+    dedup_bom = cfg.output_dir / DEDUP_BOM_FILE
+    dedup.dedup_sbom(app_bom, dedup_bom)
+
+    # ------------------------------------------------------------------
+    # 3. Подпись SBOM без уязвимостей (SHA-256)
+    # ------------------------------------------------------------------
+    signed_dedup_bom = cfg.output_dir / SIGNED_DEDUP_BOM_FILE
+    sign.sign_sbom(dedup_bom, signed_dedup_bom)
+
+    logging.info(f"[pipeline] SBOM без уязвимостей: {signed_dedup_bom}")
+
+    # ------------------------------------------------------------------
+    # 4. Экспорт отчётов (только лист компонентов)
+    # ------------------------------------------------------------------
+    logging.info("[pipeline] Экспорт отчётов компонентов...")
+    with open(signed_dedup_bom, encoding="utf-8") as f:
+        sbom_data = json.load(f)
+    _export_reports(sbom_data, [], cfg, include_vulns=False, sbom_file=SIGNED_DEDUP_BOM_FILE)
+
+    logging.info("[pipeline] Генерация SBOM завершена.")
+
+
 def run(cfg: PipelineConfig) -> None:
     """Запустить полный пайплайн."""
     cfg.ensure_output_dirs()
@@ -57,32 +290,37 @@ def run(cfg: PipelineConfig) -> None:
     cdxgen_bom = cfg.output_dir / APP_BOM_CDXGEN_FILE
     syft_bom = cfg.output_dir / APP_BOM_SYFT_FILE
 
-    if cfg.source in ("github", "gitlab"):
-        if not cfg.git_url:
-            raise ValueError(
-                f"--url обязателен для source={cfg.source}"
+    _has_code = cfg.project_dir is not None or cfg.git_url is not None
+    _has_image = not cfg.skip_clair and bool(cfg.image_name)
+
+    if not _has_code and not _has_image:
+        raise ValueError(
+            "Не задан ни один источник. Укажите --path/--url (исходный код) "
+            "и/или --image --clair (образ контейнера)."
+        )
+
+    if _has_code:
+        if cfg.source in ("github", "gitlab"):
+            if not cfg.git_url:
+                raise ValueError(
+                    f"--url обязателен для source={cfg.source}"
+                )
+            logging.info(f"[pipeline] Источник: {cfg.source} → {cfg.git_url}")
+            generate.generate_from_git(
+                url=cfg.git_url,
+                output_file=app_bom,
+                token=cfg.git_token,
+                branch=cfg.git_branch,
             )
-        logging.info(f"[pipeline] Источник: {cfg.source} → {cfg.git_url}")
-        generate.generate_from_git(
-            url=cfg.git_url,
-            output_file=app_bom,
-            token=cfg.git_token,
-            branch=cfg.git_branch,
-            use_cdxgen=cfg.use_cdxgen,
-            use_syft=cfg.use_syft,
-            cdxgen_output=cdxgen_bom,
-            syft_output=syft_bom,
-        )
+        else:
+            logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
+            assert cfg.project_dir is not None
+            generate.generate_from_dir(cfg.project_dir, app_bom)
     else:
-        logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
-        generate.generate_from_dir(
-            cfg.project_dir,
-            app_bom,
-            use_cdxgen=cfg.use_cdxgen,
-            use_syft=cfg.use_syft,
-            cdxgen_output=cdxgen_bom,
-            syft_output=syft_bom,
-        )
+        # Режим только-образ: создать пустой SBOM-каркас для обогащения Clair
+        logging.info("[pipeline] Исходный код не задан — создан пустой SBOM для образа")
+        assert cfg.image_name is not None
+        _write_empty_sbom(app_bom, cfg.image_name)
 
     # Clair: получить пакеты образа и добавить их в SBOM.
     # Уязвимости на этом этапе не разбираются — отчёт будет повторно
@@ -138,26 +376,32 @@ def run(cfg: PipelineConfig) -> None:
             nvd_api_key=cfg.nvd_api_key or "",
         )
 
-    # Trivy — filesystem
-    all_findings += trivy.scan_filesystem(
-        project_dir=cfg.project_dir,
-        output_dir=cfg.trivy_dir,
-    )
+    # Trivy — filesystem (только если project_dir задан явно)
+    if cfg.project_dir is not None:
+        all_findings += trivy.scan_filesystem(
+            project_dir=cfg.project_dir,
+            output_dir=cfg.trivy_dir,
+        )
+    else:
+        logging.info("[pipeline] project_dir не задан — Trivy FS пропущен")
     # Trivy — по SBOM (используем подписанный SBOM без уязвимостей)
     all_findings += trivy.scan_sbom(
         sbom_path=signed_dedup_bom,
         output_dir=cfg.trivy_dir,
     )
-    # Dependency-Check
-    all_findings += depcheck.scan(
-        project_dir=cfg.project_dir,
-        output_dir=cfg.depcheck_dir,
-        data_dir=cfg.dep_check_data or Path(".dependency-check-data"),
-        host_project_dir=cfg.host_project_dir,
-        host_output_dir=cfg.host_dep_report_dir,
-        host_data_dir=cfg.host_dep_check_data,
-        nvd_api_key=cfg.nvd_api_key,
-    )
+    # Dependency-Check (только если project_dir задан явно)
+    if cfg.project_dir is not None:
+        all_findings += depcheck.scan(
+            project_dir=cfg.project_dir,
+            output_dir=cfg.depcheck_dir,
+            data_dir=cfg.dep_check_data or Path(".dependency-check-data"),
+            host_project_dir=cfg.host_project_dir,
+            host_output_dir=cfg.host_dep_report_dir,
+            host_data_dir=cfg.host_dep_check_data,
+            nvd_api_key=cfg.nvd_api_key,
+        )
+    else:
+        logging.info("[pipeline] project_dir не задан — Dependency-Check пропущен")
 
     logging.info(f"[pipeline] Всего уязвимостей из всех сканеров: {len(all_findings)}")
 
@@ -252,8 +496,11 @@ def _export_reports(
     sbom_data: Dict[str, Any],
     vulns: List[VulnFinding],
     cfg: PipelineConfig,
+    include_components: bool = True,
+    include_vulns: bool = True,
+    sbom_file: str = SIGNED_BOM_FILE,
 ) -> None:
-    stem = Path(SIGNED_BOM_FILE).stem
+    stem = Path(sbom_file).stem
     excel_dir = cfg.reports_dir / EXCEL_DIR
     docx_dir = cfg.reports_dir / DOCX_DIR
     odt_dir = cfg.reports_dir / ODT_DIR
@@ -261,17 +508,17 @@ def _export_reports(
     for d in (excel_dir, docx_dir, odt_dir):
         d.mkdir(parents=True, exist_ok=True)
 
-    deps = _extract_dependencies(sbom_data, str(cfg.output_dir / SIGNED_BOM_FILE))
+    deps = _extract_dependencies(sbom_data, str(cfg.output_dir / sbom_file)) if include_components else []
     exporter = Exporter(
         deps,
         vulns=vulns,
-        sbom_path=str(cfg.output_dir / SIGNED_BOM_FILE),
+        sbom_path=str(cfg.output_dir / sbom_file),
         include_bdu=cfg.use_bdu,
     )
 
-    exporter.exportToExcel(str(excel_dir / f"{stem}{EXCEL_EXTENSION}"))
-    exporter.exportToDocx(str(docx_dir / f"{stem}{DOCX_EXTENSION}"))
-    exporter.exportToOdt(str(odt_dir / f"{stem}{ODT_EXTENSION}"))
+    exporter.exportToExcel(str(excel_dir / f"{stem}{EXCEL_EXTENSION}"), include_components=include_components, include_vulns=include_vulns)
+    exporter.exportToDocx(str(docx_dir / f"{stem}{DOCX_EXTENSION}"), include_components=include_components, include_vulns=include_vulns)
+    exporter.exportToOdt(str(odt_dir / f"{stem}{ODT_EXTENSION}"), include_components=include_components, include_vulns=include_vulns)
 
     logging.info(f"[pipeline] Отчёты → {cfg.reports_dir}")
 

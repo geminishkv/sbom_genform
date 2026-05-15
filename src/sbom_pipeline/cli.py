@@ -30,7 +30,7 @@ from .constants import SOURCE_TYPE_LOCAL
 from . import __version__
 from .banner import SECSBOMGEN, APPSECTA
 from .config import PipelineConfig
-from .pipeline import run as pipeline_run, format_sboms
+from .pipeline import run as pipeline_run, format_sboms, scan_only as pipeline_scan_only, gen_sbom as pipeline_gen_sbom
 from .sign import verify_sbom
 from .utils import setup_logging, detect_git_service
 
@@ -145,8 +145,10 @@ def _print_help_table() -> None:
     cmd_t = Table(box=rich_box.SIMPLE, show_header=False, padding=(0, 2), show_edge=False)
     cmd_t.add_column("cmd",  no_wrap=True, min_width=10)
     cmd_t.add_column("desc", style="white")
-    cmd_t.add_row("[bold green]run[/bold green]",    "Полный пайплайн: генерация → дедупликация → подпись → сканирование → отчёты")
-    cmd_t.add_row("[bold green]format[/bold green]", "Форматирование готовых SBOM JSON → xlsx / docx / odt")
+    cmd_t.add_row("[bold green]run[/bold green]",      "Полный пайплайн: генерация → дедупликация → подпись → сканирование → отчёты")
+    cmd_t.add_row("[bold green]gen-sbom[/bold green]", "Генерация SBOM → дедупликация → подпись → отчёт компонентов")
+    cmd_t.add_row("[bold green]scan[/bold green]",     "Сканирование уязвимостей готового SBOM → слияние → подпись → отчёты уязвимостей")
+    cmd_t.add_row("[bold green]format[/bold green]",   "Форматирование готовых SBOM JSON → xlsx / docx / odt")
     cmd_t.add_row("[bold green]verify[/bold green]", "Проверка SHA-256 подписи SBOM  [dim]<файл>[/dim]")
     cmd_t.add_row("[bold green]info[/bold green]",   "Инспекция SBOM: компоненты, CVE по severity, подпись  [dim]<файл>[/dim]")
     cmd_t.add_row(
@@ -159,7 +161,7 @@ def _print_help_table() -> None:
 
     # ── run options ───────────────────────────────────────────────────────────
     rt = _opts_table()
-    _opt_row(rt, "--path",            "",   "PATH", "Путь к локальному проекту",                 "PROJECT_DIR",    "examples/project_inject")
+    _opt_row(rt, "--path",            "",   "PATH", "Путь к локальному проекту",                 "PROJECT_DIR",    "")
     _opt_row(rt, "--url",             "",   "TEXT", "URL репозитория GitHub/GitLab",             "GIT_URL",        "")
     _opt_row(rt, "--token",           "",   "TEXT", "Токен доступа (ghp_... / glpat-...)",       "GIT_TOKEN",      "")
     _opt_row(rt, "--branch",          "",   "TEXT", "Ветка репозитория",                         "GIT_BRANCH",     "HEAD")
@@ -186,6 +188,33 @@ def _print_help_table() -> None:
     run_group.add_row(rt)
     run_group.add_row(examples)
     console.print(Panel(run_group, title="[dim] run [/dim]", border_style="bright_black", padding=(0, 1)))
+
+    # ── gen-sbom options ──────────────────────────────────────────────────────
+    gt2 = _opts_table()
+    _opt_row(gt2, "--path",            "",   "PATH", "Путь к локальному проекту",                 "PROJECT_DIR",    "")
+    _opt_row(gt2, "--url",             "",   "TEXT", "URL репозитория GitHub/GitLab",             "GIT_URL",        "")
+    _opt_row(gt2, "--token",           "",   "TEXT", "Токен доступа (ghp_... / glpat-...)",       "GIT_TOKEN",      "")
+    _opt_row(gt2, "--branch",          "",   "TEXT", "Ветка репозитория",                         "GIT_BRANCH",     "HEAD")
+    _opt_row(gt2, "--output-dir",      "-o", "PATH", "Директория артефактов SBOM",                "OUTPUT_DIR",     "secgensbom_out")
+    _opt_row(gt2, "--reports-dir",     "",   "PATH", "Директория отчётов",                        "REPORTS_DIR",    "secgensbom_reports")
+    _opt_row(gt2, "--image",           "",   "TEXT", "Docker-образ для обогащения пакетами Clair","IMAGE_NAME",     "")
+    _opt_row(gt2, "--clair-endpoint",  "",   "TEXT", "Endpoint Clair-сервера",                    "CLAIR_ENDPOINT", "http://clair:8080")
+    _opt_row(gt2, "--no-clair/--clair","",   "",     "Пропустить шаг Clair",                      "",               "no-clair")
+    _opt_row(gt2, "--verbose",         "-v", "",     "Подробный вывод (DEBUG-лог)",               "",               "false")
+    console.print(Panel(gt2, title="[dim] gen-sbom [/dim]", border_style="bright_black", padding=(0, 1)))
+
+    # ── scan options ──────────────────────────────────────────────────────────
+    st = _opts_table()
+    _opt_row(st, "--sbom",            "",   "PATH", "Путь к готовому SBOM JSON файлу",              "",               "")
+    _opt_row(st, "--path",            "",   "PATH", "Путь к локальному проекту (Trivy / depcheck)", "PROJECT_DIR",    "")
+    _opt_row(st, "--output-dir",      "-o", "PATH", "Директория артефактов SBOM",                   "OUTPUT_DIR",     "secgensbom_out")
+    _opt_row(st, "--reports-dir",     "",   "PATH", "Директория отчётов",                           "REPORTS_DIR",    "secgensbom_reports")
+    _opt_row(st, "--image",           "",   "TEXT", "Docker-образ для сканирования Clair",          "IMAGE_NAME",     "")
+    _opt_row(st, "--clair-endpoint",  "",   "TEXT", "Endpoint Clair-сервера",                       "CLAIR_ENDPOINT", "http://clair:8080")
+    _opt_row(st, "--no-clair/--clair","",   "",     "Пропустить шаг Clair",                         "",               "no-clair")
+    _opt_row(st, "--bdu/--no-bdu",    "",   "",     "Обогащать уязвимости идентификаторами БДУ",    "BDU",            "no-bdu")
+    _opt_row(st, "--verbose",         "-v", "",     "Подробный вывод (DEBUG-лог)",                  "",               "false")
+    console.print(Panel(st, title="[dim] scan [/dim]", border_style="bright_black", padding=(0, 1)))
 
     # ── format options ────────────────────────────────────────────────────────
     ft = _opts_table()
@@ -217,7 +246,7 @@ def _print_help_table() -> None:
 def cmd_run(
     path: Optional[Path] = typer.Option(
         None, "--path",
-        help="Путь к локальному проекту (по умолчанию: examples/project_inject)",
+        help="Путь к локальному проекту",
         envvar="PROJECT_DIR",
     ),
     url: Optional[str] = typer.Option(
@@ -304,6 +333,162 @@ def cmd_run(
     try:
         pipeline_run(cfg)
         console.print("[bold green]✓ Пайплайн завершён успешно[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Ошибка: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+    _print_footer()
+
+
+# ---------------------------------------------------------------------------
+# gen-sbom — генерация SBOM + отчёт компонентов
+# ---------------------------------------------------------------------------
+
+@app.command("gen-sbom", context_settings={"help_option_names": ["-h", "--help"]})
+def cmd_gen_sbom(
+    path: Optional[Path] = typer.Option(
+        None, "--path",
+        help="Путь к локальному проекту",
+        envvar="PROJECT_DIR",
+    ),
+    url: Optional[str] = typer.Option(
+        None, "--url",
+        help="URL репозитория GitHub/GitLab",
+        envvar="GIT_URL",
+    ),
+    token: Optional[str] = typer.Option(
+        None, "--token",
+        help="Токен доступа: GitHub (ghp_...) или GitLab (glpat-...)",
+        envvar="GIT_TOKEN",
+    ),
+    branch: Optional[str] = typer.Option(
+        None, "--branch",
+        help="Ветка (по умолчанию HEAD)",
+        envvar="GIT_BRANCH",
+    ),
+    output_dir: Path = typer.Option(
+        Path("secgensbom_out"), "--output-dir", "-o",
+        help="Директория артефактов",
+        envvar="OUTPUT_DIR",
+    ),
+    reports_dir: Path = typer.Option(
+        Path("secgensbom_reports"), "--reports-dir",
+        help="Директория отчётов",
+        envvar="REPORTS_DIR",
+    ),
+    image_name: Optional[str] = typer.Option(
+        None, "--image",
+        help="Docker-образ для обогащения пакетами Clair",
+        envvar="IMAGE_NAME",
+    ),
+    clair_endpoint: str = typer.Option(
+        "http://clair:8080", "--clair-endpoint",
+        envvar="CLAIR_ENDPOINT",
+    ),
+    no_clair: bool = typer.Option(
+        True, "--no-clair/--clair",
+        help="Пропустить шаг Clair (по умолчанию: пропускать)",
+        envvar="SKIP_CLAIR",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Подробный вывод"),
+) -> None:
+    """Генерация SBOM → дедупликация → подпись → отчёт компонентов."""
+    _print_banner()
+    setup_logging(verbose)
+
+    cfg = PipelineConfig.from_env()
+    if path:
+        cfg.project_dir = path
+        cfg.source = SOURCE_TYPE_LOCAL
+    if url:
+        cfg.git_url = url
+        cfg.source = detect_git_service(url)
+    if token:
+        cfg.git_token = token
+    if branch:
+        cfg.git_branch = branch
+    cfg.output_dir = output_dir
+    cfg.reports_dir = reports_dir
+    cfg.image_name = image_name or cfg.image_name
+    cfg.clair_endpoint = clair_endpoint
+    cfg.skip_clair = no_clair
+    cfg.__post_init__()
+
+    try:
+        pipeline_gen_sbom(cfg)
+        console.print("[bold green]✓ Генерация SBOM завершена успешно[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]✗ Ошибка: {e}[/bold red]")
+        raise typer.Exit(code=1)
+
+    _print_footer()
+
+
+# ---------------------------------------------------------------------------
+# scan — сканирование уязвимостей готового SBOM
+# ---------------------------------------------------------------------------
+
+@app.command("scan", context_settings={"help_option_names": ["-h", "--help"]})
+def cmd_scan(
+    sbom: Path = typer.Argument(..., help="Путь к готовому SBOM JSON файлу"),
+    path: Optional[Path] = typer.Option(
+        None, "--path",
+        help="Путь к локальному проекту (для Trivy FS и Dependency-Check)",
+        envvar="PROJECT_DIR",
+    ),
+    output_dir: Path = typer.Option(
+        Path("secgensbom_out"), "--output-dir", "-o",
+        help="Директория артефактов",
+        envvar="OUTPUT_DIR",
+    ),
+    reports_dir: Path = typer.Option(
+        Path("secgensbom_reports"), "--reports-dir",
+        help="Директория отчётов",
+        envvar="REPORTS_DIR",
+    ),
+    image_name: Optional[str] = typer.Option(
+        None, "--image",
+        help="Docker-образ для сканирования Clair",
+        envvar="IMAGE_NAME",
+    ),
+    clair_endpoint: str = typer.Option(
+        "http://clair:8080", "--clair-endpoint",
+        envvar="CLAIR_ENDPOINT",
+    ),
+    no_clair: bool = typer.Option(
+        True, "--no-clair/--clair",
+        help="Пропустить шаг Clair (по умолчанию: пропускать)",
+        envvar="SKIP_CLAIR",
+    ),
+    use_bdu: bool = typer.Option(
+        False, "--bdu/--no-bdu",
+        help="Обогащать уязвимости идентификаторами БДУ (по умолчанию: выключено)",
+        envvar="BDU",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Подробный вывод"),
+) -> None:
+    """Сканирование уязвимостей готового SBOM → слияние → подпись → отчёты уязвимостей."""
+    _print_banner()
+    setup_logging(verbose)
+
+    if not sbom.exists():
+        console.print(f"[bold red]✗ SBOM файл не найден:[/bold red] {sbom}")
+        raise typer.Exit(code=1)
+
+    cfg = PipelineConfig.from_env()
+    if path:
+        cfg.project_dir = path
+    cfg.output_dir = output_dir
+    cfg.reports_dir = reports_dir
+    cfg.image_name = image_name or cfg.image_name
+    cfg.clair_endpoint = clair_endpoint
+    cfg.skip_clair = no_clair
+    cfg.use_bdu = use_bdu
+    cfg.__post_init__()
+
+    try:
+        pipeline_scan_only(sbom, cfg)
+        console.print("[bold green]✓ Сканирование завершено успешно[/bold green]")
     except Exception as e:
         console.print(f"[bold red]✗ Ошибка: {e}[/bold red]")
         raise typer.Exit(code=1)
@@ -649,18 +834,27 @@ def cmd_diff(
 # ---------------------------------------------------------------------------
 # cert — обогащение полями
 # ---------------------------------------------------------------------------
-from typing import Optional, Literal
+from typing import Any, Optional
+from enum import Enum
 from datetime import datetime, timezone
 import typer
 from pathlib import Path
 import json
 import logging
 
-# Допустимые типы компонентов согласно ФСТЭК
-ComponentType = Literal["application", "framework", "library", "operating-system", "device-driver", "firmware"]
+
+class ComponentType(str, Enum):
+    """Допустимые типы компонентов согласно ФСТЭК."""
+
+    application = "application"
+    framework = "framework"
+    library = "library"
+    operating_system = "operating-system"
+    device_driver = "device-driver"
+    firmware = "firmware"
 
 def add_gost_cert_fields(sbom_path: Path, component_name: Optional[str] = None, component_version: Optional[str] = None,
-component_manufacturer: Optional[str] = None, component_type: ComponentType = "application") -> Path:
+component_manufacturer: Optional[str] = None, component_type: ComponentType = ComponentType.application) -> Path:
    
     """Переработка структуры отчета согласно требованиям информационного сообщения ФСТЭК России
     от 13 января 2025 г. N 240/24/38."""
@@ -674,7 +868,7 @@ component_manufacturer: Optional[str] = None, component_type: ComponentType = "a
     sbom["metadata"]["timestamp"] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     
     # Новая блок
-    component_data = {
+    component_data: dict[str, Any] = {
         "type": component_type,
         "name": component_name or "",
         "version": component_version or ""

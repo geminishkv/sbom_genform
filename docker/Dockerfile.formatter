@@ -15,5 +15,5 @@ ENV PYTHONUNBUFFERED=1 \
 
 VOLUME ["/app/sbom", "/app/secgensbom_out", "/app/secgensbom_reports", "/app/reports"]
 
-ENTRYPOINT ["sbom-pipeline"]
+ENTRYPOINT ["secsbom-pipeline"]
 CMD ["format"]

@@ -10,6 +10,32 @@
 
 ### Добавлено
 
+- Команда CLI `scan` (`secsbom scan <sbom.json>`) — сканирование уязвимостей готового SBOM (шаги 4–8 пайплайна): Clair (опционально), Trivy FS (опционально), Trivy SBOM, Dependency-Check (опционально), дедупликация, слияние, подпись → `merged-bom-signed.json`, экспорт листа уязвимостей
+- Команда CLI `gen-sbom` (`secsbom gen-sbom`) — генерация SBOM (шаги 1–3) + экспорт листа компонентов: генерация из источника, Clair-обогащение пакетами (опционально), дедупликация, подпись → `app-bom-dedup-signed.json`
+- Функция `pipeline.scan_only(sbom_path, cfg)` — оркестратор шагов 4–8
+- Функция `pipeline.gen_sbom(cfg)` — оркестратор шагов 1–3 + экспорт компонентов
+- Хелпер `pipeline._write_empty_sbom(path, image_name)` — создаёт минимальный CycloneDX SBOM-каркас для режима «только образ»
+- Поддержка режима **только контейнерный образ** (`--image myimage:tag --clair`): `gen-sbom` и `run` без `--path`/`--url` создают SBOM из пакетов Clair без генерации по исходному коду
+- Флаги `include_components` / `include_vulns` в методах `Exporter.exportToExcel`, `exportToDocx`, `exportToOdt` — управляют набором листов/секций без создания отдельных методов
+- Параметры `include_components`, `include_vulns`, `sbom_file` в `pipeline._export_reports` — унифицированный экспорт для всех режимов
+- Новые тесты:
+  - `tests/unit/sbom_pipeline/test_scan_only.py` — 19 юнит-тестов (классы `TestScanOnlySmoke`, `TestClairSkipping`, `TestScannerCallArguments`, `TestCvssCrossPopulate`, `TestVulnReport`, `TestDeduplication`)
+  - `tests/unit/sbom_pipeline/test_gen_sbom.py` — 19 юнит-тестов (классы `TestGenSbomSmoke`, `TestIntermediateArtefacts`, `TestSourceRouting`, `TestClairEnrichment`)
+  - CLI smoke-тесты в `tests/test_smoke.py`: 8 тест-кейсов для команды `scan`, 6 — для `gen-sbom`
+
+### Изменено
+
+- `PipelineConfig.project_dir` теперь `Optional[Path] = None` (ранее — `Path("examples/project_inject")`); значение по умолчанию больше не подставляется автоматически
+- `PipelineConfig.from_env()` не использует `examples/project_inject` как fallback для `PROJECT_DIR`
+- `pipeline.scan_only`: Trivy FS и Dependency-Check пропускаются, если `cfg.project_dir is None`; Trivy SBOM выполняется всегда
+- `pipeline.gen_sbom` и `pipeline.run`: если не задан ни один источник (нет `--path`/`--url` и нет `--image --clair`) — выбрасывается `ValueError`
+- `pipeline.run`: Trivy FS и Dependency-Check выполняются только при наличии `cfg.project_dir`
+- Описания опции `--path` в CLI и таблице help-а очищены от упоминания `examples/project_inject` как значения по умолчанию
+
+---
+
+### Добавлено
+
 - **Новые колонки отчёта «Компоненты»**:
   - `Тип пакета / тип компонента` — тип экосистемы из PURL (например, `pypi`, `maven`, `npm`, `apk`)
   - `PURL / технический идентификатор компонента` — полный PURL компонента

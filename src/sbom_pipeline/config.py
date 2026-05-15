@@ -26,7 +26,7 @@ class PipelineConfig:
 
     # --- Источник ---
     source: str = "local"          # local | github | gitlab
-    project_dir: Path = field(default_factory=lambda: Path("examples/project_inject"))
+    project_dir: Optional[Path] = None
     git_url: Optional[str] = None
     git_token: Optional[str] = None
     git_branch: Optional[str] = None
@@ -85,10 +85,7 @@ class PipelineConfig:
 
         return cls(
             source=os.getenv("SOURCE", "local"),
-            project_dir=(
-                _path("PROJECT_DIR", "examples/project_inject")
-                or Path("examples/project_inject")
-            ),
+            project_dir=_path("PROJECT_DIR"),
             git_url=os.getenv("GIT_URL") or None,
             git_token=os.getenv("GIT_TOKEN") or None,
             git_branch=os.getenv("GIT_BRANCH") or None,

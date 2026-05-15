@@ -91,6 +91,35 @@ services:
       IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
       CLAIR_ENDPOINT: http://clair:8080
 
+  # ── Scan уязвимостей готового SBOM ────────────────────────────────────────
+  scan:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.secgensbom
+    command: ["scan", "/app/secgensbom_out/app-bom-dedup-signed.json", "-v"]
+    depends_on:
+      clair:
+        condition: service_healthy
+    volumes:
+      - ./secgensbom_out:/app/secgensbom_out
+      - ./secgensbom_reports:/app/secgensbom_reports
+      - ./.dependency-check-data:/app/.dependency-check-data
+      - trivy-cache:/root/.cache/trivy
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      OUTPUT_DIR: /app/secgensbom_out
+      REPORTS_DIR: /app/secgensbom_reports
+      DEP_CHECK_DATA: /app/.dependency-check-data
+      HOST_OUTPUT_DIR: ${PWD}/secgensbom_out
+      HOST_DEP_REPORT_DIR: ${PWD}/secgensbom_out/dependency-check
+      HOST_DEP_CHECK_DATA: ${PWD}/.dependency-check-data
+      HOST_CLAIR_REPORT_DIR: ${PWD}/secgensbom_out/clair
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      SKIP_CLAIR: ${SKIP_CLAIR:-true}
+      BDU: ${BDU:-false}
+      IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
+      CLAIR_ENDPOINT: http://clair:8080
+
 volumes:
   clair-db-data:
   trivy-cache:
