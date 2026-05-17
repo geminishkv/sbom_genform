@@ -25,7 +25,7 @@ class SbomHandler:
     def sbomsList(self) -> List[str]:
         return [str(p) for p in self.sboms_list]
 
-    def readJson(self, path: str | Path) -> Optional[Dict[str, Any]]:
+    def readJson(self, path: str | Path) -> Optional[Any]:
         """Прочитать и вернуть SBOM JSON или None при ошибке."""
         logging.info(f"Чтение SBOM: {path}")
         try:

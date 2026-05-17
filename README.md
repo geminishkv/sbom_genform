@@ -27,6 +27,7 @@
 </div>
 
 Инструмент для безопасной генерации, анализа и форматирования **Software Bill of Materials (SBOM)**.
+![runhelp](assets/gifs/cmds/full_run_trimmed.gif)
 
 **Что делает:**
 
@@ -42,13 +43,7 @@
 
 ## Main CLI
 
-![mainhelp](assets/help_main.jpg)
-
-***
-
-## Run help
-
-![runhelp](assets/runhelp.png)
+![mainhelp](assets/gifs/help_main.gif)
 
 ***
 
@@ -74,6 +69,15 @@ git clone https://github.com/geminishkv/sbom_genform.git
 cd sbom_genform
 python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
+```
+
+**Запуск**
+
+```bash
+secsbom run  # локальный демо-проект                                                                                                                                                                                                                 │
+secsbom run --path ./myproject                                                                                                                                                                                                                       │
+secsbom run --url https://github.com/org/repo --token ghp_...                                                                                                                                                                                        │
+secsbom run --url https://gitlab.com/org/repo --token glpat-...
 ```
 
 ***
