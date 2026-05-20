@@ -5,11 +5,19 @@ from __future__ import annotations
 import logging
 import re
 import time
+import warnings
 from typing import Dict, Iterable
 from urllib.parse import quote, unquote
 
 import requests
+import urllib3
 from bs4 import BeautifulSoup
+
+# bdu.fstec.ru uses a self-signed / untrusted certificate; we suppress the
+# stdlib/urllib3 InsecureRequestWarning here so it never leaks to stdout.
+# The intentional use of verify=False is noted in DEBUG logs instead.
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.WARN)
 
 BDU_VUL_URL = "https://bdu.fstec.ru/vul"
 REQUEST_TIMEOUT = (10, 60)
@@ -116,6 +124,7 @@ def _extract_query_token(cookie_token: str) -> str:
 
 
 def _get_csrf_tokens() -> tuple[Dict[str, str], str]:
+    logging.debug("[bdu_client] GET %s (SSL проверка отключена)", BDU_VUL_URL)
     response = requests.get(
         BDU_VUL_URL,
         timeout=REQUEST_TIMEOUT,

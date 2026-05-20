@@ -78,6 +78,14 @@ def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
     # ------------------------------------------------------------------
     # 1. Сканирование уязвимостей
     # ------------------------------------------------------------------
+    if not cfg.nvd_api_key:
+        logging.error(
+            "[pipeline] NVD_API_KEY не задан — Dependency-Check будет работать "
+            "без аутентификации (сильно ограниченный rate-limit NVD API). "
+            "Укажите переменную окружения NVD_API_KEY=<token>. "
+            "Получить токен: https://nvd.nist.gov/developers/request-an-api-key"
+        )
+
     all_findings: List[VulnFinding] = []
 
     # Clair: запустить сканирование и разобрать уязвимости из отчёта.
@@ -365,6 +373,14 @@ def run(cfg: PipelineConfig) -> None:
     # ------------------------------------------------------------------
     # 4. Сканирование уязвимостей
     # ------------------------------------------------------------------
+    if not cfg.nvd_api_key:
+        logging.error(
+            "[pipeline] NVD_API_KEY не задан — Dependency-Check будет работать "
+            "без аутентификации (сильно ограниченный rate-limit NVD API). "
+            "Укажите переменную окружения NVD_API_KEY=<token>. "
+            "Получить токен: https://nvd.nist.gov/developers/request-an-api-key"
+        )
+
     all_findings: List[VulnFinding] = []
 
     # Clair: разобрать уязвимости из уже сохранённого отчёта (clairctl не
