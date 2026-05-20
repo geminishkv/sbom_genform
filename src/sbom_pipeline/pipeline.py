@@ -169,6 +169,7 @@ def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
             sbom_data,
             all_findings,
             enable_bdu=cfg.use_bdu,
+            bdu_cache_dir=cfg.bdu_cache_dir,
         )
         save_vuln_report(all_findings, cfg.output_dir / "vulns-normalized.json")
 
@@ -455,6 +456,7 @@ def run(cfg: PipelineConfig) -> None:
             sbom_data,
             all_findings,
             enable_bdu=cfg.use_bdu,
+            bdu_cache_dir=cfg.bdu_cache_dir,
         )
 
         # Сохранить нормализованный vuln-dump

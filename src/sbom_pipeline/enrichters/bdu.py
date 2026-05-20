@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 import time
 import warnings
-from typing import Dict, Iterable
+from pathlib import Path
+from typing import Dict, Iterable, Optional
 from urllib.parse import quote, unquote
 
 import requests
@@ -22,6 +25,9 @@ logging.getLogger("urllib3.connectionpool").setLevel(logging.WARN)
 BDU_VUL_URL = "https://bdu.fstec.ru/vul"
 REQUEST_TIMEOUT = (10, 60)
 RATE_LIMIT_DELAY: float = 1.0
+
+DEFAULT_CACHE_DIR = Path(".bdu_cache")
+_CACHE_FILE_NAME = "bdu_cache.json"
 
 _CVE_ID_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
 
@@ -41,16 +47,28 @@ DEFAULT_HEADERS = {
 }
 
 
-def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
+def get_bdu_ids_by_cves(
+    cve_ids: Iterable[str],
+    cache_dir: Optional[Path] = None,
+) -> Dict[str, str]:
     """
     Получить соответствия CVE -> BDU-ID через bdu.fstec.ru.
 
+    Результаты кэшируются на диске в *cache_dir* (по умолчанию `.bdu_cache`).
+    При повторном вызове уже известные CVE не запрашиваются повторно — в том
+    числе те, для которых BDU-ID не был найден (отрицательный результат тоже
+    сохраняется, чтобы не нагружать сервер).
+
     Args:
-        cve_ids: список/итерируемый набор CVE идентификаторов
+        cve_ids:   список/итерируемый набор CVE идентификаторов
+        cache_dir: папка для хранения кэша; если None — используется
+                   DEFAULT_CACHE_DIR (.bdu_cache)
 
     Returns:
         Dict[str, str]: ключ — cve_id, значение — bdu_id
     """
+    resolved_cache_dir = cache_dir if cache_dir is not None else DEFAULT_CACHE_DIR
+
     result: Dict[str, str] = {}
     normalized_cves: list[str] = []
     for cve in cve_ids:
@@ -65,13 +83,39 @@ def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
     if not normalized_cves:
         return result
 
+    # --- Чтение кэша ---
+    cache: Dict[str, Optional[str]] = _load_cache(resolved_cache_dir)
+    to_fetch: list[str] = []
+    for cve_id in normalized_cves:
+        if cve_id in cache:
+            bdu_id = cache[cve_id]
+            if bdu_id:
+                result[cve_id] = bdu_id
+            logging.debug("[bdu_client] Кэш: %s → %s", cve_id, bdu_id or "не найден")
+        else:
+            to_fetch.append(cve_id)
+
+    if not to_fetch:
+        logging.info(
+            "[bdu_client] Все %d CVE взяты из кэша, сетевые запросы не нужны.",
+            len(normalized_cves),
+        )
+        return result
+
+    logging.debug(
+        "[bdu_client] Кэш: %d CVE уже известны, %d требуют запроса к BDU.",
+        len(normalized_cves) - len(to_fetch),
+        len(to_fetch),
+    )
+
+    # --- Сетевые запросы только для незакэшированных CVE ---
     try:
         cookie_jar, query_token = _get_csrf_tokens()
     except Exception as exc:
         logging.warning("[bdu_client] Не удалось получить CSRF-токены: %s", exc)
         return result
 
-    for idx, cve_id in enumerate(normalized_cves):
+    for idx, cve_id in enumerate(to_fetch):
         if idx > 0:
             time.sleep(RATE_LIMIT_DELAY)
         try:
@@ -97,6 +141,8 @@ def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
                 cookie_jar["PHPSESSID"] = phpsessid
 
             bdu_id = _extract_bdu_id(response.text)
+            # Сохраняем в кэш и None (не найден) — чтобы не запрашивать снова
+            cache[cve_id] = bdu_id
             if bdu_id:
                 result[cve_id] = bdu_id
                 logging.debug("[bdu_client] BDU-ID найден для %s: %s", cve_id, bdu_id)
@@ -105,9 +151,51 @@ def get_bdu_ids_by_cves(cve_ids: Iterable[str]) -> Dict[str, str]:
 
         except requests.RequestException as exc:
             logging.warning("[bdu_client] Ошибка запроса для %s: %s", cve_id, exc)
+            # Не кэшируем ошибки сети — попробуем снова при следующем запуске
 
-    logging.info(f"[bdu_client] Найдено {len(result)} BDU-ID для {len(normalized_cves)} CVE")
+    # --- Сохранение обновлённого кэша ---
+    _save_cache(resolved_cache_dir, cache)
+
+    logging.info(
+        "[bdu_client] Найдено %d BDU-ID для %d CVE (%d — из кэша, %d — новых запросов)",
+        len(result),
+        len(normalized_cves),
+        len(normalized_cves) - len(to_fetch),
+        len(to_fetch),
+    )
     return result
+
+# --- Cache helpers ---
+
+def _load_cache(cache_dir: Path) -> Dict[str, Optional[str]]:
+    """Загрузить кэш CVE→BDU с диска; вернуть пустой dict при отсутствии файла."""
+    cache_file = cache_dir / _CACHE_FILE_NAME
+    if not cache_file.exists():
+        return {}
+    try:
+        with open(cache_file, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            return data  # type: ignore[return-value]
+        logging.warning("[bdu_client] Кэш-файл %s имеет неожиданный формат — сброс.", cache_file)
+    except Exception as exc:
+        logging.warning("[bdu_client] Не удалось прочитать кэш %s: %s", cache_file, exc)
+    return {}
+
+
+def _save_cache(cache_dir: Path, data: Dict[str, Optional[str]]) -> None:
+    """Атомарно сохранить кэш CVE→BDU на диск."""
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / _CACHE_FILE_NAME
+        tmp_file = cache_file.with_suffix(".tmp")
+        with open(tmp_file, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
+        os.replace(tmp_file, cache_file)
+        logging.debug("[bdu_client] Кэш сохранён: %s (%d записей)", cache_file, len(data))
+    except Exception as exc:
+        logging.warning("[bdu_client] Не удалось сохранить кэш: %s", exc)
+
 
 # --- Helper functions ---
 

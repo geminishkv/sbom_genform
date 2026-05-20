@@ -38,6 +38,7 @@ def merge_vulns_into_sbom(
     sbom: Dict[str, Any],
     findings: List[VulnFinding],
     enable_bdu: bool = False,
+    bdu_cache_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Встроить список VulnFinding в SBOM как массив «vulnerabilities»
@@ -62,7 +63,7 @@ def merge_vulns_into_sbom(
     bdu_by_cve_index: Dict[str, str] = {}
     if enable_bdu:
         findings_list: list[str] = [f.cve_id for f in findings]
-        bdu_by_cve_index = bdu.get_bdu_ids_by_cves(findings_list)
+        bdu_by_cve_index = bdu.get_bdu_ids_by_cves(findings_list, cache_dir=bdu_cache_dir)
 
     vulns: list[Dict[str, Any]] = []
     for f in findings:
