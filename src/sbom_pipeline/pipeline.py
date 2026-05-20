@@ -14,10 +14,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .config import PipelineConfig
 from .constants import (
@@ -61,6 +62,36 @@ def _write_empty_sbom(path: Path, image_name: str) -> None:
     SbomHandler.write_json(data, path)
 
 
+def _run_scanners_parallel(
+    tasks: list[tuple[str, Callable[[], List[VulnFinding]]]],
+) -> List[VulnFinding]:
+    """
+    Запустить задачи сканирования параллельно в пуле потоков.
+
+    Каждая задача — пара (label, callable), где callable возвращает
+    List[VulnFinding] и не разделяет изменяемое состояние с другими задачами.
+    Результаты собираются только после завершения всех Future, поэтому
+    итоговый список формируется в главном потоке без гонки данных.
+    Исключение внутри задачи логируется и не прерывает остальные.
+    """
+    if not tasks:
+        return []
+    combined: List[VulnFinding] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        futures: dict[concurrent.futures.Future[List[VulnFinding]], str] = {
+            executor.submit(fn): label for label, fn in tasks
+        }
+        for future in concurrent.futures.as_completed(futures):
+            label = futures[future]
+            try:
+                findings = future.result()
+                combined.extend(findings)
+                logging.info("[pipeline] [%s] найдено %d уязвимостей", label, len(findings))
+            except Exception as exc:
+                logging.error("[pipeline] [%s] ошибка сканирования: %s", label, exc)
+    return combined
+
+
 def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
     """Сканирование уязвимостей для готового SBOM (шаги 4–8).
 
@@ -86,57 +117,71 @@ def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
             "Получить токен: https://nvd.nist.gov/developers/request-an-api-key"
         )
 
-    all_findings: List[VulnFinding] = []
-
-    # Clair: запустить сканирование и разобрать уязвимости из отчёта.
+    # Собираем задачи сканирования — они будут запущены параллельно.
     if not cfg.skip_clair and not cfg.image_name:
         logging.warning(
             "[clair] SKIP_CLAIR=false, но IMAGE_NAME не задан — "
             "сканирование Clair пропущено. "
             "Укажите переменную окружения IMAGE_NAME=<image>:<tag>."
         )
-    _clair_report_file: Optional[Path] = None
-    if not cfg.skip_clair and cfg.image_name:
-        _clair_report_file = clair.run_scan_report(
-            image_name=cfg.image_name,
-            output_dir=cfg.clair_dir,
-            clair_endpoint=cfg.clair_endpoint,
-        )
-        if _clair_report_file is not None:
-            all_findings += clair.parse_report_findings(
-                report_file=_clair_report_file,
-                clair_endpoint=cfg.clair_endpoint,
-                nvd_api_key=cfg.nvd_api_key or "",
-            )
 
-    # Trivy — filesystem (только если project_dir задан явно)
+    _scanner_tasks: list[tuple[str, Callable[[], List[VulnFinding]]]] = []
+
+    if not cfg.skip_clair and cfg.image_name:
+        _ci = cfg.image_name
+        _cd = cfg.clair_dir
+        _ce = cfg.clair_endpoint
+        _nk = cfg.nvd_api_key or ""
+
+        def _task_clair_scan() -> List[VulnFinding]:
+            report = clair.run_scan_report(image_name=_ci, output_dir=_cd, clair_endpoint=_ce)
+            if report is None:
+                return []
+            return clair.parse_report_findings(report_file=report, clair_endpoint=_ce, nvd_api_key=_nk)
+
+        _scanner_tasks.append(("clair", _task_clair_scan))
+
     if cfg.project_dir is not None:
-        all_findings += trivy.scan_filesystem(
-            project_dir=cfg.project_dir,
-            output_dir=cfg.trivy_dir,
-        )
+        _pd = cfg.project_dir
+        _td = cfg.trivy_dir
+
+        def _task_trivy_fs() -> List[VulnFinding]:
+            return trivy.scan_filesystem(project_dir=_pd, output_dir=_td)
+
+        _scanner_tasks.append(("trivy-fs", _task_trivy_fs))
     else:
         logging.info("[pipeline] project_dir не задан — Trivy FS пропущен")
-    # Trivy — по SBOM
-    all_findings += trivy.scan_sbom(
-        sbom_path=sbom_path,
-        output_dir=cfg.trivy_dir,
-    )
-    # Dependency-Check (только если project_dir задан явно)
+
+    _sbom = sbom_path
+    _tds = cfg.trivy_dir
+
+    def _task_trivy_sbom() -> List[VulnFinding]:
+        return trivy.scan_sbom(sbom_path=_sbom, output_dir=_tds)
+
+    _scanner_tasks.append(("trivy-sbom", _task_trivy_sbom))
+
     if cfg.project_dir is not None:
-        all_findings += depcheck.scan(
-            project_dir=cfg.project_dir,
-            output_dir=cfg.depcheck_dir,
-            data_dir=cfg.dep_check_data or Path(".dependency-check-data"),
-            host_project_dir=cfg.host_project_dir,
-            host_output_dir=cfg.host_dep_report_dir,
-            host_data_dir=cfg.host_dep_check_data,
-            nvd_api_key=cfg.nvd_api_key,
-        )
+        _pd2 = cfg.project_dir
+        _dd = cfg.depcheck_dir
+        _dcd = cfg.dep_check_data or Path(".dependency-check-data")
+        _hpd = cfg.host_project_dir
+        _hdr = cfg.host_dep_report_dir
+        _hdd = cfg.host_dep_check_data
+        _nk2 = cfg.nvd_api_key
+
+        def _task_depcheck() -> List[VulnFinding]:
+            return depcheck.scan(
+                project_dir=_pd2, output_dir=_dd, data_dir=_dcd,
+                host_project_dir=_hpd, host_output_dir=_hdr, host_data_dir=_hdd,
+                nvd_api_key=_nk2,
+            )
+
+        _scanner_tasks.append(("dependency-check", _task_depcheck))
     else:
         logging.info("[pipeline] project_dir не задан — Dependency-Check пропущен")
 
-    logging.info(f"[pipeline] Всего уязвимостей из всех сканеров: {len(all_findings)}")
+    all_findings = _run_scanners_parallel(_scanner_tasks)
+    logging.info("[pipeline] Всего уязвимостей из всех сканеров: %d", len(all_findings))
 
     # Cross-populate CVSS scores
     _cve_score: Dict[str, float] = {}
@@ -382,45 +427,63 @@ def run(cfg: PipelineConfig) -> None:
             "Получить токен: https://nvd.nist.gov/developers/request-an-api-key"
         )
 
-    all_findings: List[VulnFinding] = []
+    # Собираем задачи сканирования — они будут запущены параллельно.
+    _scanner_tasks2: list[tuple[str, Callable[[], List[VulnFinding]]]] = []
 
     # Clair: разобрать уязвимости из уже сохранённого отчёта (clairctl не
     # запускается повторно — используем файл, полученный на этапе 1).
     if _clair_report_file is not None:
-        all_findings += clair.parse_report_findings(
-            report_file=_clair_report_file,
-            clair_endpoint=cfg.clair_endpoint,
-            nvd_api_key=cfg.nvd_api_key or "",
-        )
+        _crf = _clair_report_file
+        _ce2 = cfg.clair_endpoint
+        _nk3 = cfg.nvd_api_key or ""
 
-    # Trivy — filesystem (только если project_dir задан явно)
+        def _task_clair_parse() -> List[VulnFinding]:
+            return clair.parse_report_findings(report_file=_crf, clair_endpoint=_ce2, nvd_api_key=_nk3)
+
+        _scanner_tasks2.append(("clair", _task_clair_parse))
+
     if cfg.project_dir is not None:
-        all_findings += trivy.scan_filesystem(
-            project_dir=cfg.project_dir,
-            output_dir=cfg.trivy_dir,
-        )
+        _pd3 = cfg.project_dir
+        _td3 = cfg.trivy_dir
+
+        def _task_trivy_fs2() -> List[VulnFinding]:
+            return trivy.scan_filesystem(project_dir=_pd3, output_dir=_td3)
+
+        _scanner_tasks2.append(("trivy-fs", _task_trivy_fs2))
     else:
         logging.info("[pipeline] project_dir не задан — Trivy FS пропущен")
+
     # Trivy — по SBOM (используем подписанный SBOM без уязвимостей)
-    all_findings += trivy.scan_sbom(
-        sbom_path=signed_dedup_bom,
-        output_dir=cfg.trivy_dir,
-    )
-    # Dependency-Check (только если project_dir задан явно)
+    _sdb2 = signed_dedup_bom
+    _tds2 = cfg.trivy_dir
+
+    def _task_trivy_sbom2() -> List[VulnFinding]:
+        return trivy.scan_sbom(sbom_path=_sdb2, output_dir=_tds2)
+
+    _scanner_tasks2.append(("trivy-sbom", _task_trivy_sbom2))
+
     if cfg.project_dir is not None:
-        all_findings += depcheck.scan(
-            project_dir=cfg.project_dir,
-            output_dir=cfg.depcheck_dir,
-            data_dir=cfg.dep_check_data or Path(".dependency-check-data"),
-            host_project_dir=cfg.host_project_dir,
-            host_output_dir=cfg.host_dep_report_dir,
-            host_data_dir=cfg.host_dep_check_data,
-            nvd_api_key=cfg.nvd_api_key,
-        )
+        _pd4 = cfg.project_dir
+        _dd2 = cfg.depcheck_dir
+        _dcd2 = cfg.dep_check_data or Path(".dependency-check-data")
+        _hpd2 = cfg.host_project_dir
+        _hdr2 = cfg.host_dep_report_dir
+        _hdd2 = cfg.host_dep_check_data
+        _nk4 = cfg.nvd_api_key
+
+        def _task_depcheck2() -> List[VulnFinding]:
+            return depcheck.scan(
+                project_dir=_pd4, output_dir=_dd2, data_dir=_dcd2,
+                host_project_dir=_hpd2, host_output_dir=_hdr2, host_data_dir=_hdd2,
+                nvd_api_key=_nk4,
+            )
+
+        _scanner_tasks2.append(("dependency-check", _task_depcheck2))
     else:
         logging.info("[pipeline] project_dir не задан — Dependency-Check пропущен")
 
-    logging.info(f"[pipeline] Всего уязвимостей из всех сканеров: {len(all_findings)}")
+    all_findings = _run_scanners_parallel(_scanner_tasks2)
+    logging.info("[pipeline] Всего уязвимостей из всех сканеров: %d", len(all_findings))
 
     # Cross-populate CVSS scores: build a CVE→best_score index from every
     # finding that already has a non-zero score, then apply it to any
