@@ -89,7 +89,7 @@ services:
       # Clair — set IMAGE_NAME to the container image you want to scan
       SKIP_CLAIR: ${SKIP_CLAIR:-true}
       BDU: ${BDU:-false}
-      BDU_CACHE_DIR: ${PWD}/.bdu_cache      
+      BDU_CACHE_DIR: /app/.bdu_cache
       IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
       CLAIR_ENDPOINT: http://clair:8080
 
@@ -120,7 +120,7 @@ services:
       NVD_API_KEY: ${NVD_API_KEY:-}
       SKIP_CLAIR: ${SKIP_CLAIR:-true}
       BDU: ${BDU:-false}
-      BDU_CACHE_DIR: ${PWD}/.bdu_cache   
+      BDU_CACHE_DIR: /app/.bdu_cache
       IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
       CLAIR_ENDPOINT: http://clair:8080
 
