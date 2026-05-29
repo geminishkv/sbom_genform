@@ -384,3 +384,87 @@ class TestDeduplication:
             data = json.loads((cfg.output_dir / SIGNED_BOM_FILE).read_text())
             vuln_ids = [v["id"] for v in data.get("vulnerabilities", [])]
             assert vuln_ids.count("CVE-2024-DUP") == 1
+
+
+# ---------------------------------------------------------------------------
+# Unit: NVD API key warning (added in this branch)
+# ---------------------------------------------------------------------------
+
+class TestNvdApiKeyWarning:
+    """scan_only should warn once when NVD_API_KEY is absent."""
+
+    def _run(self, tmp: Path, nvd_api_key=None) -> None:
+        sbom_path = _write_sbom(Path(tmp) / "input.json")
+        cfg = _cfg(Path(tmp), nvd_api_key=nvd_api_key)
+
+        with (
+            patch("sbom_pipeline.pipeline.trivy.scan_filesystem", return_value=[]),
+            patch("sbom_pipeline.pipeline.trivy.scan_sbom", return_value=[]),
+            patch("sbom_pipeline.pipeline.depcheck.scan", return_value=[]),
+            patch("sbom_pipeline.pipeline._export_reports"),
+        ):
+            scan_only(sbom_path, cfg)
+
+    def test_warning_emitted_when_nvd_api_key_is_none(self, caplog):
+        import logging
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with caplog.at_level(logging.WARNING):
+                self._run(Path(tmp), nvd_api_key=None)
+
+        assert any("NVD_API_KEY" in r.message for r in caplog.records)
+
+    def test_warning_not_emitted_when_nvd_api_key_is_set(self, caplog):
+        import logging
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with caplog.at_level(logging.WARNING):
+                self._run(Path(tmp), nvd_api_key="my-secret-token")
+
+        assert not any("NVD_API_KEY" in r.message for r in caplog.records)
+
+    def test_warning_contains_docs_link(self, caplog):
+        import logging
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with caplog.at_level(logging.WARNING):
+                self._run(Path(tmp), nvd_api_key=None)
+
+        messages = " ".join(r.message for r in caplog.records)
+        assert "nvd.nist.gov" in messages
+
+
+# ---------------------------------------------------------------------------
+# Unit: bdu_cache_dir forwarded to merge_vulns_into_sbom (added in this branch)
+# ---------------------------------------------------------------------------
+
+class TestBduCacheDirForwarding:
+    """scan_only must pass cfg.bdu_cache_dir to merge_vulns_into_sbom."""
+
+    def test_bdu_cache_dir_forwarded_to_merge(self, tmp_path):
+        sbom_path = _write_sbom(tmp_path / "input.json")
+        cache_dir = tmp_path / "my_bdu_cache"
+        cfg = _cfg(tmp_path, bdu_cache_dir=cache_dir)
+
+        captured: dict = {}
+
+        def capture_merge(sbom, findings, enable_bdu=False, bdu_cache_dir=None):
+            captured["bdu_cache_dir"] = bdu_cache_dir
+            return sbom
+
+        with (
+            patch("sbom_pipeline.pipeline.trivy.scan_filesystem", return_value=[_finding()]),
+            patch("sbom_pipeline.pipeline.trivy.scan_sbom", return_value=[]),
+            patch("sbom_pipeline.pipeline.depcheck.scan", return_value=[]),
+            patch("sbom_pipeline.pipeline.merge_vulns_into_sbom", side_effect=capture_merge),
+            patch("sbom_pipeline.pipeline._export_reports"),
+        ):
+            scan_only(sbom_path, cfg)
+
+        assert captured["bdu_cache_dir"] == cache_dir
+
+    def test_bdu_cache_dir_default_is_dot_bdu_cache(self, tmp_path):
+        """Default cfg.bdu_cache_dir must equal Path('.bdu_cache')."""
+        cfg = _cfg(tmp_path)
+        assert cfg.bdu_cache_dir == Path(".bdu_cache")
+

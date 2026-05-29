@@ -68,6 +68,7 @@ services:
       - ./secgensbom_out:/app/secgensbom_out
       - ./secgensbom_reports:/app/secgensbom_reports
       - ./.dependency-check-data:/app/.dependency-check-data
+      - ./.bdu_cache:/app/.bdu_cache
       - trivy-cache:/root/.cache/trivy
       # Docker socket so the pipeline can spawn depcheck & clairctl containers
       - /var/run/docker.sock:/var/run/docker.sock
@@ -88,6 +89,7 @@ services:
       # Clair — set IMAGE_NAME to the container image you want to scan
       SKIP_CLAIR: ${SKIP_CLAIR:-true}
       BDU: ${BDU:-false}
+      BDU_CACHE_DIR: /app/.bdu_cache
       IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
       CLAIR_ENDPOINT: http://clair:8080
 
@@ -104,6 +106,7 @@ services:
       - ./secgensbom_out:/app/secgensbom_out
       - ./secgensbom_reports:/app/secgensbom_reports
       - ./.dependency-check-data:/app/.dependency-check-data
+      - ./.bdu_cache:/app/.bdu_cache
       - trivy-cache:/root/.cache/trivy
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -117,6 +120,7 @@ services:
       NVD_API_KEY: ${NVD_API_KEY:-}
       SKIP_CLAIR: ${SKIP_CLAIR:-true}
       BDU: ${BDU:-false}
+      BDU_CACHE_DIR: /app/.bdu_cache
       IMAGE_NAME: ${IMAGE_NAME:-postgres:14}
       CLAIR_ENDPOINT: http://clair:8080
 

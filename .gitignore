@@ -54,6 +54,7 @@ secgensbom_out/
 secgensbom_reports/
 reports/
 .dependency-check-data/
+.bdu_cache/
 
 
 # Generated report files (keep examples/ intact)

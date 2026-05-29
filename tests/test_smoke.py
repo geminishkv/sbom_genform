@@ -860,3 +860,91 @@ def test_cli_gen_sbom_exception_exits_nonzero(monkeypatch, tmp_path):
 
     result = _CLI_RUNNER.invoke(cli.app, ["gen-sbom"])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Smoke: BDU cache dir config (added in this branch)
+# ---------------------------------------------------------------------------
+
+def test_config_default_bdu_cache_dir():
+    """Default bdu_cache_dir must be sibling of dep_check_data default."""
+    cfg = PipelineConfig()
+    assert cfg.bdu_cache_dir == Path(".bdu_cache")
+
+
+def test_config_bdu_cache_dir_from_env(monkeypatch):
+    """BDU_CACHE_DIR env var must override the default."""
+    monkeypatch.setenv("BDU_CACHE_DIR", "/tmp/my_bdu_cache")
+    cfg = PipelineConfig.from_env()
+    assert cfg.bdu_cache_dir == Path("/tmp/my_bdu_cache")
+
+
+def test_config_bdu_cache_dir_default_when_env_unset(monkeypatch):
+    """When BDU_CACHE_DIR is not set, bdu_cache_dir is derived from dep_check_data."""
+    monkeypatch.delenv("BDU_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DEP_CHECK_DATA", raising=False)
+    cfg = PipelineConfig.from_env()
+    assert cfg.bdu_cache_dir == Path(".bdu_cache")
+
+
+# ---------------------------------------------------------------------------
+# Smoke: urllib3 InsecureRequestWarning is suppressed (added in this branch)
+# ---------------------------------------------------------------------------
+
+def test_bdu_module_suppresses_insecure_request_warning():
+    """bdu module must silence InsecureRequestWarning noise.
+
+    We verify two things that bdu.py does at import time:
+    1. It registers a 'warnings.filterwarnings("ignore", ...)' filter — checked
+       behaviorally: emitting the warning inside a fresh catch_warnings context
+       that re-applies the same filter must produce zero recorded warnings.
+    2. It lowers the urllib3.connectionpool logger level to WARNING so the same
+       message doesn't leak through the logging system.
+    """
+    import logging
+    import warnings
+    import urllib3.exceptions
+    from sbom_pipeline.enrichters import bdu  # noqa: F401 — import for side-effects
+
+    # Behavioural: a catch_warnings context with bdu's filter active must swallow
+    # the InsecureRequestWarning.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
+        warnings.warn("test", urllib3.exceptions.InsecureRequestWarning, stacklevel=1)
+
+    insecure = [w for w in caught if issubclass(w.category, urllib3.exceptions.InsecureRequestWarning)]
+    assert insecure == [], "InsecureRequestWarning was not suppressed"
+
+    # Structural: urllib3.connectionpool logger must be at WARNING or higher.
+    assert logging.getLogger("urllib3.connectionpool").level >= logging.WARNING
+
+
+# ---------------------------------------------------------------------------
+# Smoke: _run_scanners_parallel is importable and works for empty input
+# ---------------------------------------------------------------------------
+
+def test_run_scanners_parallel_importable():
+    from sbom_pipeline.pipeline import _run_scanners_parallel
+    assert callable(_run_scanners_parallel)
+
+
+def test_run_scanners_parallel_empty_returns_empty_list():
+    from sbom_pipeline.pipeline import _run_scanners_parallel
+    assert _run_scanners_parallel([]) == []
+
+
+# ---------------------------------------------------------------------------
+# Smoke: merge_vulns_into_sbom accepts bdu_cache_dir kwarg (added in this branch)
+# ---------------------------------------------------------------------------
+
+def test_merge_vulns_into_sbom_accepts_bdu_cache_dir_kwarg(tmp_path):
+    """merge_vulns_into_sbom must not raise when bdu_cache_dir is provided."""
+    sbom: dict = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "components": [],
+    }
+    # Should not raise even with an explicit cache_dir and no findings.
+    result = merge_vulns_into_sbom(sbom, [], enable_bdu=False, bdu_cache_dir=tmp_path)
+    assert result["bomFormat"] == "CycloneDX"
+

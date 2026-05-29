@@ -61,6 +61,7 @@ class PipelineConfig:
 
     # --- Enrichment ---
     use_bdu: bool = False
+    bdu_cache_dir: Optional[Path] = None
 
     # --- Производные пути (вычисляются после init) ---
     trivy_dir: Path = field(init=False)
@@ -74,6 +75,8 @@ class PipelineConfig:
 
         if self.dep_check_data is None:
             self.dep_check_data = Path(".dependency-check-data")
+        if self.bdu_cache_dir is None:
+            self.bdu_cache_dir = self.dep_check_data.parent / ".bdu_cache"
 
     @classmethod
     def from_env(cls) -> "PipelineConfig":
@@ -106,6 +109,7 @@ class PipelineConfig:
             skip_clair=os.getenv("SKIP_CLAIR", "true").lower() in ("true", "1", "yes"),
             github_token=os.getenv("GITHUB_TOKEN") or None,
             use_bdu=os.getenv("BDU", "false").lower() in ("true", "1", "yes"),
+            bdu_cache_dir=_path("BDU_CACHE_DIR"),
         )
 
     def ensure_output_dirs(self) -> None:
