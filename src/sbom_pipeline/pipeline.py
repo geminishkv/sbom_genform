@@ -92,7 +92,7 @@ def _run_scanners_parallel(
     return combined
 
 
-def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
+def scan_only(sbom_path: Optional[Path], cfg: PipelineConfig) -> None:
     """Сканирование уязвимостей для готового SBOM (шаги 4–8).
 
     Шаги: 
@@ -105,6 +105,15 @@ def scan_only(sbom_path: Path, cfg: PipelineConfig) -> None:
         5. Экспорт отчётов (только листы уязвимостей)
     """
     cfg.ensure_output_dirs()
+
+    if sbom_path is None:
+        if cfg.skip_clair or not cfg.image_name:
+            raise ValueError(
+                "Укажите путь к SBOM или контейнерный образ через --clair --image."
+            )
+        sbom_path = cfg.output_dir / APP_BOM_FILE
+        _write_empty_sbom(sbom_path, cfg.image_name)
+        logging.info("[pipeline] SBOM не задан — создан пустой SBOM для образа: %s", sbom_path)
 
     # ------------------------------------------------------------------
     # 1. Сканирование уязвимостей

@@ -71,14 +71,128 @@ python3 -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-**Запуск**
+## Запуск утилиты
+
+После установки доступна помощь:
 
 ```bash
-secsbom run  # локальный демо-проект                                                                                                                                                                                                                 │
-secsbom run --path ./myproject                                                                                                                                                                                                                       │
-secsbom run --url https://github.com/org/repo --token ghp_...                                                                                                                                                                                        │
-secsbom run --url https://gitlab.com/org/repo --token glpat-...
+secsbom --help
 ```
+
+Утилиту нужно запускать от обычного пользователя. Запуск с правами администратора/root
+завершается ошибкой, чтобы не выполнять сканеры и Docker-команды с лишними привилегиями.
+
+### Быстрый старт
+
+Полный пайплайн генерирует SBOM, дедуплицирует компоненты, подписывает SBOM,
+сканирует уязвимости и экспортирует отчёты:
+
+```bash
+# локальный демо-проект
+secsbom run
+
+# указание локального проекта из примеров
+secsbom run --path examples/project_inject
+
+# удалёный репозиторий github с токеном
+secsbom run --url https://github.com/org/repo --token ghp_... 
+
+# удалёный репозиторий gitlab с токеном
+secsbom run --url https://gitlab.com/org/repo --token glpat-... 
+```
+
+По умолчанию артефакты пишутся в `secgensbom_out`, отчёты — в
+`secgensbom_reports`.
+
+### Основные режимы
+
+Сгенерировать и подписать SBOM без этапа сканирования уязвимостей:
+
+```bash
+secsbom gen-sbom --path examples/project_inject
+```
+
+Просканировать уже готовый SBOM (и/или контейнерный образ) и сформировать отчёты только по уязвимостям:
+
+```bash
+# путь к папке проекта + готовый SBOM
+secsbom scan secgensbom_out/app-bom-dedup-signed.json --path examples/project_inject
+
+# только готовый SBOM
+secsbom scan secgensbom_out/app-bom-dedup-signed.json
+
+# только контейнерный образ
+secsbom scan --clair --image nginx:latest
+```
+
+Отформатировать готовые SBOM JSON в Excel/Word/ODT:
+
+```bash
+secsbom format --sbom-dir secgensbom_out --report-dir secgensbom_reports
+```
+
+Проверить подпись SBOM:
+
+```bash
+secsbom verify secgensbom_out/merged-bom-signed.json
+```
+
+Посмотреть краткую информацию по SBOM:
+
+```bash
+secsbom info secgensbom_out/merged-bom-signed.json
+```
+
+Проверить наличие внешних инструментов:
+
+```bash
+secsbom status
+```
+
+Сравнить два SBOM:
+
+```bash
+secsbom diff old-bom.json new-bom.json
+```
+
+Добавить поля GOST для отчёта по требованиям ФСТЭК:
+
+```bash
+secsbom cert sbom.json \
+  --component-name "My Product" \
+  --component-version "1.0.0" \
+  --manufacturer "My Company"
+```
+
+### Полезные флаги и переменные
+
+```bash
+secsbom run --no-cdxgen          # не использовать cdxgen
+secsbom run --no-syft            # не использовать syft
+secsbom run --bdu                # включить BDU-обогащение
+secsbom run --clair --image nginx:latest
+secsbom run -o secgensbom_out --reports-dir secgensbom_reports
+```
+
+Те же настройки можно передавать через переменные окружения:
+
+```bash
+export PROJECT_DIR=examples/project_inject
+export OUTPUT_DIR=secgensbom_out
+export REPORTS_DIR=secgensbom_reports
+export BDU=true
+export NVD_API_KEY=<token>
+
+secsbom run
+```
+
+Для `scan` используются кэши внешних данных:
+
+- `.dependency-check-data` / `DEP_CHECK_DATA` — база NVD для OWASP Dependency-Check
+- `.bdu_cache` / `BDU_CACHE_DIR` — соответствия CVE -> BDU ID
+
+Сами этапы `scan` при повторном запуске выполняются заново, кэшируются именно
+базы и справочные ответы внешних инструментов.
 
 ***
 
