@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import ctypes
 import subprocess
 import sys
 from pathlib import Path
@@ -1007,13 +1008,28 @@ def cmd_cert(
     _print_footer()
 
 # ---------------------------------------------------------------------------
+# Функция проверки запуска с аккаунта администратора
+# ---------------------------------------------------------------------------
+
+def is_admin():
+    try:
+        # Unix-like
+        return os.getuid() == 0
+    except Exception:
+        # Windows
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            return False
+
+# ---------------------------------------------------------------------------
 # Точка входа
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    if os.getuid() == 0:
+    if is_admin():
         Console(stderr=True).print(
-            "[bold red]✗ Запуск от имени root запрещён. "
+            "[bold red]✗ Запуск с правами администратора запрещён. "
             "Используйте непривилегированного пользователя.[/bold red]"
         )
         sys.exit(1)
