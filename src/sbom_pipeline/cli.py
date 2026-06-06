@@ -431,7 +431,7 @@ def cmd_gen_sbom(
 
 @app.command("scan", context_settings={"help_option_names": ["-h", "--help"]})
 def cmd_scan(
-    sbom: Path = typer.Argument(..., help="Путь к готовому SBOM JSON файлу"),
+    sbom: str = typer.Argument("", help="Путь к готовому SBOM JSON файлу"),
     path: Optional[Path] = typer.Option(
         None, "--path",
         help="Путь к локальному проекту (для Trivy FS и Dependency-Check)",
@@ -472,10 +472,6 @@ def cmd_scan(
     _print_banner()
     setup_logging(verbose)
 
-    if not sbom.exists():
-        console.print(f"[bold red]✗ SBOM файл не найден:[/bold red] {sbom}")
-        raise typer.Exit(code=1)
-
     cfg = PipelineConfig.from_env()
     if path:
         cfg.project_dir = path
@@ -487,8 +483,21 @@ def cmd_scan(
     cfg.use_bdu = use_bdu
     cfg.__post_init__()
 
+    sbom_path = Path(sbom) if sbom else None
+
+    if sbom_path is not None and not sbom_path.exists():
+        console.print(f"[bold red]✗ SBOM файл не найден:[/bold red] {sbom_path}")
+        raise typer.Exit(code=1)
+
+    if sbom_path is None and (cfg.skip_clair or not cfg.image_name):
+        console.print(
+            "[bold red]✗ Укажите SBOM файл или контейнерный образ "
+            "через --clair --image <image>:<tag>[/bold red]"
+        )
+        raise typer.Exit(code=1)
+
     try:
-        pipeline_scan_only(sbom, cfg)
+        pipeline_scan_only(sbom_path, cfg)
         console.print("[bold green]✓ Сканирование завершено успешно[/bold green]")
     except Exception as e:
         console.print(f"[bold red]✗ Ошибка: {e}[/bold red]")

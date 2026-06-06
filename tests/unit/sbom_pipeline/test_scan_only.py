@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from sbom_pipeline.config import PipelineConfig
-from sbom_pipeline.constants import SIGNED_BOM_FILE
+from sbom_pipeline.constants import APP_BOM_FILE, SIGNED_BOM_FILE
 from sbom_pipeline.pipeline import scan_only
 from sbom_pipeline.sign import verify_sbom
 from sbom_pipeline.vuln_merger import VulnFinding
@@ -134,6 +134,33 @@ class TestScanOnlySmoke:
 
             _, kwargs = mock_export.call_args
             assert kwargs.get("include_components") is False
+
+    def test_image_only_creates_empty_sbom(self, tmp_path):
+        cfg = _cfg(
+            tmp_path,
+            project_dir=None,
+            skip_clair=False,
+            image_name="nginx:latest",
+        )
+
+        with (
+            patch("sbom_pipeline.pipeline.clair.run_scan_report", return_value=None),
+            patch("sbom_pipeline.pipeline.trivy.scan_sbom", return_value=[]),
+            patch("sbom_pipeline.pipeline._export_reports"),
+        ):
+            scan_only(None, cfg)
+
+        app_bom = cfg.output_dir / APP_BOM_FILE
+        data = json.loads(app_bom.read_text(encoding="utf-8"))
+        assert data["metadata"]["component"]["type"] == "container"
+        assert data["metadata"]["component"]["name"] == "nginx:latest"
+        assert (cfg.output_dir / SIGNED_BOM_FILE).exists()
+
+    def test_none_sbom_without_image_raises(self, tmp_path):
+        cfg = _cfg(tmp_path, project_dir=None, skip_clair=True, image_name=None)
+
+        with pytest.raises(ValueError, match="SBOM"):
+            scan_only(None, cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -467,4 +494,3 @@ class TestBduCacheDirForwarding:
         """Default cfg.bdu_cache_dir must equal Path('.bdu_cache')."""
         cfg = _cfg(tmp_path)
         assert cfg.bdu_cache_dir == Path(".bdu_cache")
-

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -679,6 +680,36 @@ def test_cli_scan_missing_file_exits_nonzero(monkeypatch):
     assert result.exit_code != 0
 
 
+def test_cli_scan_without_source_exits_nonzero(monkeypatch):
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["scan"])
+    assert result.exit_code != 0
+
+
+def test_cli_scan_image_only_passes_none_sbom_to_pipeline(monkeypatch):
+    captured: dict = {}
+
+    def fake_scan(sbom, cfg):
+        captured["sbom"] = sbom
+        captured["skip_clair"] = cfg.skip_clair
+        captured["image_name"] = cfg.image_name
+
+    monkeypatch.setattr(cli, "pipeline_scan_only", fake_scan)
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+    monkeypatch.setattr(cli, "setup_logging", lambda verbose: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["scan", "--clair", "--image", "nginx:latest"])
+
+    assert result.exit_code == 0
+    assert captured["sbom"] is None
+    assert captured["skip_clair"] is False
+    assert captured["image_name"] == "nginx:latest"
+
+
 def test_cli_scan_passes_sbom_to_pipeline(monkeypatch, tmp_path):
     sbom_file = tmp_path / "input.json"
     _write_sbom(sbom_file)
@@ -863,6 +894,75 @@ def test_cli_gen_sbom_exception_exits_nonzero(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# admin/root launch guard (Unix-like and Windows modes)
+# ---------------------------------------------------------------------------
+
+def test_is_admin_unix_like_root(monkeypatch):
+    monkeypatch.setattr(cli.os, "getuid", lambda: 0)
+
+    assert cli.is_admin() is True
+
+
+def test_is_admin_unix_like_unprivileged(monkeypatch):
+    monkeypatch.setattr(cli.os, "getuid", lambda: 1000)
+
+    assert cli.is_admin() is False
+
+
+def test_is_admin_windows_admin(monkeypatch):
+    class Shell32:
+        @staticmethod
+        def IsUserAnAdmin():
+            return 1
+
+    class Windll:
+        shell32 = Shell32()
+
+    monkeypatch.setattr(cli.os, "getuid", lambda: (_ for _ in ()).throw(AttributeError()))
+    monkeypatch.setattr(cli.ctypes, "windll", Windll(), raising=False)
+
+    assert cli.is_admin() is True
+
+
+def test_is_admin_windows_unprivileged(monkeypatch):
+    class Shell32:
+        @staticmethod
+        def IsUserAnAdmin():
+            return 0
+
+    class Windll:
+        shell32 = Shell32()
+
+    monkeypatch.setattr(cli.os, "getuid", lambda: (_ for _ in ()).throw(AttributeError()))
+    monkeypatch.setattr(cli.ctypes, "windll", Windll(), raising=False)
+
+    assert cli.is_admin() is False
+
+
+def test_main_exits_before_cli_when_admin(monkeypatch):
+    monkeypatch.setattr(cli, "is_admin", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["secsbom", "status"])
+    monkeypatch.setattr(cli, "app", lambda: pytest.fail("CLI app must not run as admin"))
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 1
+
+
+def test_main_delegates_to_cli_when_unprivileged(monkeypatch):
+    called: dict[str, bool] = {}
+
+    monkeypatch.setattr(cli, "is_admin", lambda: False)
+    monkeypatch.setattr(sys, "argv", ["secsbom", "status"])
+    monkeypatch.setattr(cli, "app", lambda: called.setdefault("app", True))
+
+    cli.main()
+
+    assert called["app"] is True
+
+
+# ---------------------------------------------------------------------------
 # Smoke: BDU cache dir config (added in this branch)
 # ---------------------------------------------------------------------------
 
@@ -947,4 +1047,3 @@ def test_merge_vulns_into_sbom_accepts_bdu_cache_dir_kwarg(tmp_path):
     # Should not raise even with an explicit cache_dir and no findings.
     result = merge_vulns_into_sbom(sbom, [], enable_bdu=False, bdu_cache_dir=tmp_path)
     assert result["bomFormat"] == "CycloneDX"
-
