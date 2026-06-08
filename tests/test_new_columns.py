@@ -137,6 +137,35 @@ class TestFindProp:
 
 
 # ===========================================================================
+# 2b. Dependency network behavior
+# ===========================================================================
+
+class TestDependencyNetworkBehavior:
+    """Component report enrichment should not make hidden HTTP calls by default."""
+
+    def test_npm_processing_is_offline_by_default(self, monkeypatch):
+        from sbom_pipeline import dependency
+
+        dependency._DepsMemory.clear()
+        monkeypatch.delenv("SBOM_COMPONENT_NETWORK", raising=False)
+
+        with patch(
+            "sbom_pipeline.dependency.requests.get",
+            side_effect=AssertionError("network called"),
+        ):
+            dep = dependency.Dependency(
+                name="lodash",
+                version="4.17.21",
+                depType=[],
+                purl="pkg:npm/lodash@4.17.21",
+                pathToSbom="/fake/sbom.json",
+            )
+
+        assert dep.srcLangs == ["JavaScript"]
+        assert dep.source == "https://www.npmjs.com/package/lodash/v/4.17.21"
+
+
+# ===========================================================================
 # 3. _extract_dependencies — component columns from SBOM
 # ===========================================================================
 
@@ -193,6 +222,7 @@ class TestExtractDependencies:
         "attack_surface",
         "attackSurface",
         "isAttackSurface",
+        "GOST: attack_surface",
     ])
     def test_attack_surface_recognised(self, prop_name: str):
         props = [{"name": prop_name, "value": "yes"}]
@@ -214,6 +244,7 @@ class TestExtractDependencies:
         "security_function",
         "securityFunction",
         "isSecurityFunction",
+        "GOST: security_function",
     ])
     def test_security_function_recognised(self, prop_name: str):
         props = [{"name": prop_name, "value": "crypto"}]

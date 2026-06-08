@@ -141,12 +141,18 @@ def scan_only(sbom_path: Optional[Path], cfg: PipelineConfig) -> None:
         _cd = cfg.clair_dir
         _ce = cfg.clair_endpoint
         _nk = cfg.nvd_api_key or ""
+        _nvd_cache = cfg.nvd_cache_dir
 
         def _task_clair_scan() -> List[VulnFinding]:
             report = clair.run_scan_report(image_name=_ci, output_dir=_cd, clair_endpoint=_ce)
             if report is None:
                 return []
-            return clair.parse_report_findings(report_file=report, clair_endpoint=_ce, nvd_api_key=_nk)
+            return clair.parse_report_findings(
+                report_file=report,
+                clair_endpoint=_ce,
+                nvd_api_key=_nk,
+                nvd_cache_dir=_nvd_cache,
+            )
 
         _scanner_tasks.append(("clair", _task_clair_scan))
 
@@ -445,9 +451,15 @@ def run(cfg: PipelineConfig) -> None:
         _crf = _clair_report_file
         _ce2 = cfg.clair_endpoint
         _nk3 = cfg.nvd_api_key or ""
+        _nvd_cache2 = cfg.nvd_cache_dir
 
         def _task_clair_parse() -> List[VulnFinding]:
-            return clair.parse_report_findings(report_file=_crf, clair_endpoint=_ce2, nvd_api_key=_nk3)
+            return clair.parse_report_findings(
+                report_file=_crf,
+                clair_endpoint=_ce2,
+                nvd_api_key=_nk3,
+                nvd_cache_dir=_nvd_cache2,
+            )
 
         _scanner_tasks2.append(("clair", _task_clair_parse))
 
@@ -670,11 +682,23 @@ def _extract_dependencies(sbom: Dict[str, Any], sbom_path: str) -> List[Dependen
                 package_type=_purl_type(comp.get("purl") or ""),
                 attack_surface=_find_prop(
                     props,
-                    ("attack-surface", "attack_surface", "attackSurface", "isAttackSurface"),
+                    (
+                        "attack-surface",
+                        "attack_surface",
+                        "attackSurface",
+                        "isAttackSurface",
+                        "GOST: attack_surface",
+                    ),
                 ),
                 security_function=_find_prop(
                     props,
-                    ("security-function", "security_function", "securityFunction", "isSecurityFunction"),
+                    (
+                        "security-function",
+                        "security_function",
+                        "securityFunction",
+                        "isSecurityFunction",
+                        "GOST: security_function",
+                    ),
                 ),
                 container_image=container_image,
                 container_role=_find_prop(

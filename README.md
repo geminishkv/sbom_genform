@@ -29,6 +29,16 @@
 Инструмент для безопасной генерации, анализа и форматирования **Software Bill of Materials (SBOM)**.
 ![runhelp](assets/gifs/cmds/full_run_trimmed.gif)
 
+## Навигация
+
+- [Установка](#установка)
+- [Выходные артефакты](#выходные-артефакты)
+- [Примеры результатов](docs/RESULT_EXAMPLES.md#примеры-результатов)
+- [BDU Enrichment](#bdu-enrichment)
+- [Docker](#docker)
+- [Troubleshooting](docs/TROUBLESHOOTING.md#troubleshooting)
+- [Архитектура](#архитектура)
+
 **Что делает:**
 
 - Генерирует SBOM из локальной директории или Git-репозитория (GitHub / GitLab)
@@ -240,8 +250,8 @@ secsbom run
 | Тип пакета / тип компонента | тип экосистемы из PURL (`pypi`, `maven`, `npm`, `apk`, …) |
 | PURL / технический идентификатор компонента | `components[].purl` из SBOM |
 | Язык (языки) | определяется по PURL-типу (`dependency.py`) |
-| Признак принадлежности к поверхности атаки | свойство компонента CycloneDX: `attack-surface` / `attackSurface` / `isAttackSurface` |
-| Признак выполнения функций безопасности | свойство компонента CycloneDX: `security-function` / `securityFunction` / `isSecurityFunction` |
+| Признак принадлежности к поверхности атаки | свойство компонента CycloneDX: `attack-surface` / `attackSurface` / `isAttackSurface` / `GOST: attack_surface` |
+| Признак выполнения функций безопасности | свойство компонента CycloneDX: `security-function` / `securityFunction` / `isSecurityFunction` / `GOST: security_function` |
 | Принадлежность к контейнерному образу | `metadata.component.name` (только если `type = "container"`) |
 | Роль компонента в составе контейнерного образа | свойство компонента: `container-role` / `containerRole` / `cdx:docker:layer` / `layer` |
 | Адрес веб-ресурса | реестровый URL, вычисленный по PURL |
@@ -264,6 +274,26 @@ secsbom run
 Если пайплайн запущен с `--bdu` или `BDU=true`, во всех форматах отчётов уязвимостей появляется отдельная колонка `BDU / ID`. Если BDU-обогащение выключено, эта колонка не выводится.
 
 ---
+
+## Примеры результатов
+
+Подробные примеры итогового SBOM, `vulns-normalized.json` и экспортируемых таблиц вынесены в [docs/RESULT_EXAMPLES.md](docs/RESULT_EXAMPLES.md#примеры-результатов).
+
+Короткий пример структуры после полного запуска:
+
+```text
+secgensbom_out/
+├── app-bom-dedup-signed.json
+├── merged-bom-signed.json
+├── vulns-normalized.json
+├── dependency-check/
+├── trivy/
+└── clair/
+secgensbom_reports/
+├── excel/merged-bom-signed.xlsx
+├── docx/merged-bom-signed.docx
+└── odt/merged-bom-signed.odt
+```
 
 ## BDU Enrichment
 
@@ -306,7 +336,7 @@ secsbom run
 
 ## Docker
 
-Образ включает Python, Trivy, Docker CLI и Node.js/npx (cdxgen для non-Python проектов).
+Образ включает Python, Syft, Trivy, Docker CLI и Node.js/npx (cdxgen для non-Python проектов).
 OWASP Dependency-Check запускается внутри утилиты через `docker run` (Docker-in-Docker), его Java-зависимость утяжелила бы основной образ на ~400 МБ.
 Clair требует отдельного работающего HTTP-сервера — поэтому он вынесен в `docker-compose.yml`.
 
@@ -352,8 +382,17 @@ docker compose up --build
 | `IMAGE_NAME`      | —                                         | Docker-образ для сканирования Clair          |
 | `BDU`             | `false`                                   | Включить обогащение идентификаторами БДУ ФСТЭК |
 | `DEP_CHECK_DATA`  | `/app/.dependency-check-data`             | Кэш NVD для Dependency-Check                 |
+| `NVD_CACHE_DIR`   | `$DEP_CHECK_DATA/nvd-api-cache`           | Кэш ответов NVD API для повторного CVSS lookup |
+| `SBOM_COMPONENT_NETWORK` | `false`                           | Разрешить сетевые уточнения языков/URL при экспорте компонентов |
 
 > **Примечание:** Если `IMAGE_NAME` не задан, шаг Clair пропускается автоматически.
+
+`NVD_CACHE_DIR` хранит ответы NVD API по CVE и используется Clair fallback при заполнении пустого CVSS. Повторный запуск берёт оценку из уже сохранённого ответа и не делает новый HTTP-запрос.
+По умолчанию экспорт компонентов не ходит в npm/NuGet/Debian/GitHub за уточнениями; для максимально быстрых и воспроизводимых отчётов язык и URL вычисляются из PURL.
+
+## Troubleshooting
+
+Частые ошибки запуска, сетевых лимитов NVD, Docker/Clair и пустых отчётных колонок собраны в [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#troubleshooting).
 
 ***
 

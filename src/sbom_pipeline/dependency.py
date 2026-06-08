@@ -10,7 +10,8 @@ from packageurl import PackageURL
 
 from .utils import clean_git_url
 
-_DepsMemory: list = []
+_DepsMemory: dict[tuple[str, str, str], tuple[list[str], Optional[str]]] = {}
+_NETWORK_ENV = "SBOM_COMPONENT_NETWORK"
 
 
 class Dependency:
@@ -44,16 +45,17 @@ class Dependency:
 
         logging.debug(f"Обработка зависимости: {name} {version}")
 
-        if self not in _DepsMemory:
+        cache_key = (self.name, self.version, self.purl)
+        cached = _DepsMemory.get(cache_key)
+        if cached is None:
             try:
                 self._process_purl(purl)
             except Exception as e:
                 logging.exception(f"processPurl ошибка для {purl}: {e}")
-            _DepsMemory.append(self)
+            _DepsMemory[cache_key] = (list(self.srcLangs), self.source)
         else:
-            cached = _DepsMemory[_DepsMemory.index(self)]
-            self.srcLangs = cached.srcLangs
-            self.source = cached.source
+            self.srcLangs = list(cached[0])
+            self.source = cached[1]
 
     # ------------------------------------------------------------------
     # Обработка по типу PURL
@@ -113,35 +115,35 @@ class Dependency:
 
     def _process_deb(self, p: PackageURL) -> None:
         url = f"https://tracker.debian.org/pkg/{p.name}"
-        try:
-            resp = requests.get(url, timeout=10)
-            self.source = url if resp.status_code == 200 else None
-        except Exception:
-            self.source = None
         self.srcLangs = ["C"]
+        self.source = url
 
     def _process_nuget(self, p: PackageURL) -> None:
         pkg_url = f"https://www.nuget.org/packages/{p.name}/{p.version}"
+        if not _component_network_enabled():
+            self.srcLangs, self.source = [".NET"], pkg_url
+            return
+
         try:
             resp = requests.get(pkg_url, timeout=10)
             if resp.status_code != 200:
-                self.srcLangs, self.source = ["NUGET check manually"], pkg_url
+                self.srcLangs, self.source = [".NET"], pkg_url
                 return
             soup = BeautifulSoup(resp.text, "html.parser")
             link = (
-                soup.find(attrs={"data-track": "outbound-repository-url"})
-                or soup.find(attrs={"data-track": "outbound-project-url"})
+                soup.select_one('[data-track="outbound-repository-url"]')
+                or soup.select_one('[data-track="outbound-project-url"]')
             )
             if link and link.get("href") and "github.com" in link["href"]:
                 href = str(link["href"])
                 langs = self._fetch_github_langs(clean_git_url(href))
-                self.srcLangs = langs or ["NUGET check manually"]
+                self.srcLangs = langs or [".NET"]
                 self.source = href
             else:
-                self.srcLangs, self.source = ["NUGET check manually"], pkg_url
+                self.srcLangs, self.source = [".NET"], pkg_url
         except Exception as e:
             logging.warning(f"NuGet {p.name}: {e}")
-            self.srcLangs, self.source = ["NUGET check manually"], pkg_url
+            self.srcLangs, self.source = [".NET"], pkg_url
 
     def _process_npm(self, p: PackageURL) -> None:
         ns = p.namespace
@@ -152,22 +154,26 @@ class Dependency:
             api_url = f"https://registry.npmjs.com/{p.name}/{p.version}"
             pkg_url = f"https://www.npmjs.com/package/{p.name}/v/{p.version}"
 
+        if not _component_network_enabled():
+            self.srcLangs, self.source = ["JavaScript"], pkg_url
+            return
+
         try:
             resp = requests.get(api_url, timeout=10)
             if resp.status_code != 200:
-                self.srcLangs, self.source = ["JavaScript*"], pkg_url
+                self.srcLangs, self.source = ["JavaScript"], pkg_url
                 return
             content = resp.json()
             repo_url = (content.get("repository") or {}).get("url", "")
             if repo_url and "github.com" in repo_url:
                 langs = self._fetch_github_langs(clean_git_url(repo_url))
-                self.srcLangs = langs or ["JavaScript*"]
+                self.srcLangs = langs or ["JavaScript"]
             else:
-                self.srcLangs = ["JavaScript*"]
+                self.srcLangs = ["JavaScript"]
             self.source = pkg_url
         except Exception as e:
             logging.warning(f"NPM {p.name}: {e}")
-            self.srcLangs, self.source = ["JavaScript*"], pkg_url
+            self.srcLangs, self.source = ["JavaScript"], pkg_url
 
     def _fetch_github_langs(self, repo_path: str) -> list[str]:
         token = os.getenv("GITHUB_TOKEN")
@@ -195,3 +201,7 @@ class Dependency:
 
     def __hash__(self) -> int:
         return hash((self.name, self.version, self.purl))
+
+
+def _component_network_enabled() -> bool:
+    return os.getenv(_NETWORK_ENV, "").lower() in ("1", "true", "yes", "on")

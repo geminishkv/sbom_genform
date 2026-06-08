@@ -218,6 +218,7 @@ class TestClairSkipping:
                 scan_only(sbom_path, cfg)
 
             mock_parse.assert_called_once()
+            assert mock_parse.call_args.kwargs["nvd_cache_dir"] == cfg.nvd_cache_dir
 
     def test_clair_findings_included_when_report_returned(self):
         with tempfile.TemporaryDirectory() as tmp:
