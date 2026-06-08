@@ -131,8 +131,8 @@ class Dependency:
                 return
             soup = BeautifulSoup(resp.text, "html.parser")
             link = (
-                soup.find(attrs={"data-track": "outbound-repository-url"})
-                or soup.find(attrs={"data-track": "outbound-project-url"})
+                soup.select_one('[data-track="outbound-repository-url"]')
+                or soup.select_one('[data-track="outbound-project-url"]')
             )
             if link and link.get("href") and "github.com" in link["href"]:
                 href = str(link["href"])
