@@ -58,6 +58,7 @@ class PipelineConfig:
 
     # NVD API key for OWASP Dependency-Check
     nvd_api_key: Optional[str] = None
+    nvd_cache_dir: Optional[Path] = None
 
     # --- Enrichment ---
     use_bdu: bool = False
@@ -75,6 +76,8 @@ class PipelineConfig:
 
         if self.dep_check_data is None:
             self.dep_check_data = Path(".dependency-check-data")
+        if self.nvd_cache_dir is None:
+            self.nvd_cache_dir = self.dep_check_data / "nvd-api-cache"
         if self.bdu_cache_dir is None:
             self.bdu_cache_dir = self.dep_check_data.parent / ".bdu_cache"
 
@@ -103,6 +106,7 @@ class PipelineConfig:
             host_trivy_report_dir=_path("HOST_TRIVY_REPORT_DIR"),
             host_clair_report_dir=_path("HOST_CLAIR_REPORT_DIR"),
             nvd_api_key=os.getenv("NVD_API_KEY") or None,
+            nvd_cache_dir=_path("NVD_CACHE_DIR"),
             dep_check_data=_path("DEP_CHECK_DATA", ".dependency-check-data"),
             image_name=os.getenv("IMAGE_NAME") or None,
             clair_endpoint=os.getenv("CLAIR_ENDPOINT", "http://clair:8080"),

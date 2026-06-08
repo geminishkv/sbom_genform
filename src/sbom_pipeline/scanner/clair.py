@@ -12,6 +12,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..enrichters import nvd
 from ..vuln_merger import VulnFinding
 
 # NormalizedSeverity is serialized as an integer (claircore.Severity):
@@ -123,6 +124,7 @@ def parse_report_findings(
     report_file: Path,
     clair_endpoint: str = "http://clair:8080",
     nvd_api_key: str = "",
+    nvd_cache_dir: Optional[Path] = None,
 ) -> List[VulnFinding]:
     """
     Извлечь уязвимости из сохранённого JSON-отчёта Clair.
@@ -145,7 +147,11 @@ def parse_report_findings(
     # Fallback: запросить CVSS из NVD API 2.0 для оставшихся CVE без оценки
     zero_cves = list({f.cve_id for f in findings if f.cvss_score == 0.0 and f.cve_id.startswith("CVE-")})
     if zero_cves:
-        nvd_scores = _fetch_cvss_from_nvd(zero_cves, api_key=nvd_api_key)
+        nvd_scores = _fetch_cvss_from_nvd(
+            zero_cves,
+            api_key=nvd_api_key,
+            cache_dir=nvd_cache_dir,
+        )
         if nvd_scores:
             filled = 0
             for f in findings:
@@ -165,6 +171,7 @@ def scan_image(
     retries: int = _CLAIR_RETRIES,
     retry_delay: float = _CLAIR_RETRY_DELAY,
     nvd_api_key: str = "",
+    nvd_cache_dir: Optional[Path] = None,
 ) -> List[VulnFinding]:
     """
     Проанализировать образ через clairctl + Clair HTTP API.
@@ -186,6 +193,7 @@ def scan_image(
         report_file=report_file,
         clair_endpoint=clair_endpoint,
         nvd_api_key=nvd_api_key,
+        nvd_cache_dir=nvd_cache_dir,
     )
 
 
@@ -252,62 +260,16 @@ def _fetch_vuln_report(endpoint: str, manifest_hash: str, timeout: int = 60) -> 
 def _fetch_cvss_from_nvd(
     cve_ids: List[str],
     api_key: str = "",
+    cache_dir: Optional[Path] = None,
 ) -> Dict[str, float]:
     """
-    Запросить CVSS base score из NVD API 2.0 для списка CVE ID.
+    Получить CVSS base score из дискового NVD-кэша или NVD API 2.0.
 
-    Без ключа: лимит 5 запросов / 30 с → задержка 6.5 с между запросами.
-    С ключом:  лимит 50 запросов / 30 с → задержка 0.7 с.
+    Без ключа: лимит 5 запросов / 30 с -> задержка 6.5 с между запросами.
+    С ключом:  лимит 50 запросов / 30 с -> задержка 0.7 с.
     Ошибки молча пропускаются (функция best-effort).
     """
-    import urllib.parse
-
-    if not cve_ids:
-        return {}
-
-    delay = 0.7 if api_key else 6.5
-    headers: Dict[str, str] = {"Accept": "application/json"}
-    if api_key:
-        headers["apiKey"] = api_key
-
-    scores: Dict[str, float] = {}
-    logging.info(f"[clair] NVD fallback: запрос CVSS для {len(cve_ids)} CVE (задержка {delay}s)")
-
-    for cve_id in cve_ids:
-        url = (
-            "https://services.nvd.nist.gov/rest/json/cves/2.0?"
-            + urllib.parse.urlencode({"cveId": cve_id})
-        )
-        try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                if resp.status != 200:
-                    continue
-                data: Dict[str, Any] = json.loads(resp.read())
-            vulns = data.get("vulnerabilities") or []
-            if not vulns:
-                continue
-            metrics = (vulns[0].get("cve") or {}).get("metrics") or {}
-            score = 0.0
-            for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
-                for entry in metrics.get(key) or []:
-                    s = (entry.get("cvssData") or {}).get("baseScore", 0.0)
-                    try:
-                        s = float(s)
-                    except (TypeError, ValueError):
-                        s = 0.0
-                    if s:
-                        score = s
-                        break
-                if score:
-                    break
-            if score:
-                scores[cve_id] = score
-        except Exception as exc:
-            logging.debug(f"[clair] NVD lookup failed for {cve_id}: {exc}")
-        time.sleep(delay)
-
-    return scores
+    return nvd.get_cvss_scores_by_cves(cve_ids, api_key=api_key, cache_dir=cache_dir)
 
 
 # ------------------------------------------------------------------
@@ -775,5 +737,3 @@ def _set_prop(props: List[Dict[str, str]], name: str, value: str) -> None:
             p["value"] = value
             return
     props.append({"name": name, "value": value})
-
-

@@ -380,25 +380,25 @@ class TestFetchCvssFromNvd:
         resp.__exit__ = MagicMock(return_value=False)
         return resp
 
-    def test_returns_v31_score(self):
+    def test_returns_v31_score(self, tmp_path):
         resp = self._nvd_resp("CVE-2024-0001", score_v31=9.8)
         with patch("urllib.request.urlopen", return_value=resp):
             with patch("time.sleep"):
-                result = _fetch_cvss_from_nvd(["CVE-2024-0001"])
+                result = _fetch_cvss_from_nvd(["CVE-2024-0001"], cache_dir=tmp_path)
         assert result == {"CVE-2024-0001": 9.8}
 
-    def test_falls_back_to_v2_when_no_v31(self):
+    def test_falls_back_to_v2_when_no_v31(self, tmp_path):
         resp = self._nvd_resp("CVE-2024-0002", score_v2=6.5)
         with patch("urllib.request.urlopen", return_value=resp):
             with patch("time.sleep"):
-                result = _fetch_cvss_from_nvd(["CVE-2024-0002"])
+                result = _fetch_cvss_from_nvd(["CVE-2024-0002"], cache_dir=tmp_path)
         assert result == {"CVE-2024-0002": 6.5}
 
     def test_empty_input_returns_empty(self):
         result = _fetch_cvss_from_nvd([])
         assert result == {}
 
-    def test_no_vulnerabilities_in_response_skipped(self):
+    def test_no_vulnerabilities_in_response_skipped(self, tmp_path):
         body = {"vulnerabilities": []}
         raw = json.dumps(body).encode()
         resp = MagicMock()
@@ -408,26 +408,33 @@ class TestFetchCvssFromNvd:
         resp.__exit__ = MagicMock(return_value=False)
         with patch("urllib.request.urlopen", return_value=resp):
             with patch("time.sleep"):
-                result = _fetch_cvss_from_nvd(["CVE-2024-9999"])
+                result = _fetch_cvss_from_nvd(["CVE-2024-9999"], cache_dir=tmp_path)
         assert result == {}
 
-    def test_network_error_skipped_continues(self):
+    def test_network_error_skipped_continues(self, tmp_path):
         responses = [OSError("timeout"), self._nvd_resp("CVE-2024-0002", score_v31=7.0)]
         with patch("urllib.request.urlopen", side_effect=responses):
             with patch("time.sleep"):
-                result = _fetch_cvss_from_nvd(["CVE-2024-0001", "CVE-2024-0002"])
+                result = _fetch_cvss_from_nvd(
+                    ["CVE-2024-0001", "CVE-2024-0002"],
+                    cache_dir=tmp_path,
+                )
         assert "CVE-2024-0001" not in result
         assert result.get("CVE-2024-0002") == 7.0
 
-    def test_api_key_included_in_header(self):
+    def test_api_key_included_in_header(self, tmp_path):
         resp = self._nvd_resp("CVE-2024-0001", score_v31=5.0)
         with patch("urllib.request.urlopen", return_value=resp) as mock_open:
             with patch("time.sleep"):
-                _fetch_cvss_from_nvd(["CVE-2024-0001"], api_key="my-key")
+                _fetch_cvss_from_nvd(
+                    ["CVE-2024-0001"],
+                    api_key="my-key",
+                    cache_dir=tmp_path,
+                )
         req = mock_open.call_args[0][0]
         assert req.get_header("Apikey") == "my-key"
 
-    def test_non_200_status_skipped(self):
+    def test_non_200_status_skipped(self, tmp_path):
         resp = MagicMock()
         resp.status = 404
         resp.read.return_value = b"{}"
@@ -435,8 +442,21 @@ class TestFetchCvssFromNvd:
         resp.__exit__ = MagicMock(return_value=False)
         with patch("urllib.request.urlopen", return_value=resp):
             with patch("time.sleep"):
-                result = _fetch_cvss_from_nvd(["CVE-2024-0001"])
+                result = _fetch_cvss_from_nvd(["CVE-2024-0001"], cache_dir=tmp_path)
         assert result == {}
+
+    def test_cached_result_skips_network(self, tmp_path):
+        resp = self._nvd_resp("CVE-2024-0001", score_v31=9.8)
+        with patch("urllib.request.urlopen", return_value=resp):
+            with patch("time.sleep"):
+                assert _fetch_cvss_from_nvd(["CVE-2024-0001"], cache_dir=tmp_path) == {
+                    "CVE-2024-0001": 9.8
+                }
+
+        with patch("urllib.request.urlopen", side_effect=AssertionError("network called")):
+            assert _fetch_cvss_from_nvd(["CVE-2024-0001"], cache_dir=tmp_path) == {
+                "CVE-2024-0001": 9.8
+            }
 
 
 # ===========================================================================

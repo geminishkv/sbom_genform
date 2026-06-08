@@ -987,6 +987,19 @@ def test_config_bdu_cache_dir_default_when_env_unset(monkeypatch):
     assert cfg.bdu_cache_dir == Path(".bdu_cache")
 
 
+def test_config_default_nvd_cache_dir():
+    """Default nvd_cache_dir must live under dep_check_data."""
+    cfg = PipelineConfig()
+    assert cfg.nvd_cache_dir == Path(".dependency-check-data") / "nvd-api-cache"
+
+
+def test_config_nvd_cache_dir_from_env(monkeypatch):
+    """NVD_CACHE_DIR env var must override the default."""
+    monkeypatch.setenv("NVD_CACHE_DIR", "/tmp/my_nvd_cache")
+    cfg = PipelineConfig.from_env()
+    assert cfg.nvd_cache_dir == Path("/tmp/my_nvd_cache")
+
+
 # ---------------------------------------------------------------------------
 # Smoke: urllib3 InsecureRequestWarning is suppressed (added in this branch)
 # ---------------------------------------------------------------------------
