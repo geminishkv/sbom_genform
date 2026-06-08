@@ -336,7 +336,7 @@ secsbom run
 
 ## Docker
 
-Образ включает Python, Trivy, Docker CLI и Node.js/npx (cdxgen для non-Python проектов).
+Образ включает Python, Syft, Trivy, Docker CLI и Node.js/npx (cdxgen для non-Python проектов).
 OWASP Dependency-Check запускается внутри утилиты через `docker run` (Docker-in-Docker), его Java-зависимость утяжелила бы основной образ на ~400 МБ.
 Clair требует отдельного работающего HTTP-сервера — поэтому он вынесен в `docker-compose.yml`.
 

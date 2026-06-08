@@ -2,9 +2,10 @@
 FROM python:3.13-slim
 
 ARG VERSION=latest
+ARG SYFT_VERSION=v1.45.1
 
 LABEL org.opencontainers.image.title="sbom-pipeline" \
-      org.opencontainers.image.description="SBOM Generator & Formatter — CycloneDX 1.5, Trivy, OWASP Dependency-Check" \
+      org.opencontainers.image.description="SBOM Generator & Formatter — CycloneDX 1.5, Syft, Trivy, OWASP Dependency-Check" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/geminishkv/sbom_genform" \
       org.opencontainers.image.licenses="MIT" \
@@ -27,6 +28,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # --- Trivy ---
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
     | sh -s -- -b /usr/local/bin v0.70.0
+
+# --- Syft ---
+RUN curl -sSfL https://get.anchore.io/syft \
+    | sh -s -- -b /usr/local/bin "${SYFT_VERSION}" \
+ && syft version
 
 # --- clairctl ---
 # Kept as a fallback; the primary execution path is `docker exec <clair-container> clairctl`
