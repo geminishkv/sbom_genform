@@ -547,7 +547,7 @@ def cmd_format(
 def cmd_verify(
     sbom: Path = typer.Argument(..., help="Путь к SBOM JSON файлу"),
 ) -> None:
-    """Проверка SHA-256 подписи SBOM."""
+    """Проверка SHA-256 контрольной суммы целостности SBOM (не криптоподпись)."""
     _print_banner()
     setup_logging()
     if not sbom.exists():

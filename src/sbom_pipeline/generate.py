@@ -425,7 +425,13 @@ def generate_from_git(
         kwargs: dict[str, Any] = {"depth": 1}
         if branch:
             kwargs["branch"] = branch
-        gitpy.Repo.clone_from(clone_url, clone_dir, **kwargs)
+        try:
+            gitpy.Repo.clone_from(clone_url, clone_dir, **kwargs)
+        except gitpy.GitCommandError as exc:
+            # CWE-532: clone_url содержит oauth2:<token>@host — не дать токену
+            # утечь в консоль/лог через текст исключения.
+            message = str(exc).replace(clone_url, url) if token else str(exc)
+            raise RuntimeError(f"Не удалось клонировать {url}: {message}") from None
         logging.info(f"[generate] Клонировано в {clone_dir}")
         return generate_from_dir(
             clone_dir,

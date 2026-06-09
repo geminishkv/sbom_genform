@@ -26,6 +26,12 @@ BDU_VUL_URL = "https://bdu.fstec.ru/vul"
 REQUEST_TIMEOUT = (10, 60)
 RATE_LIMIT_DELAY: float = 1.0
 
+# TLS-проверка для bdu.fstec.ru (CWE-295). Сайт использует self-signed
+# сертификат, поэтому по умолчанию проверка отключена (verify=False). Задайте
+# переменную окружения BDU_CA_BUNDLE=/path/to/fstec-ca.pem, чтобы включить
+# проверку против доверенного CA и защититься от MITM.
+BDU_VERIFY: "bool | str" = os.getenv("BDU_CA_BUNDLE") or False
+
 DEFAULT_CACHE_DIR = Path(".bdu_cache")
 _CACHE_FILE_NAME = "bdu_cache.json"
 
@@ -129,7 +135,7 @@ def get_bdu_ids_by_cves(
                 headers=DEFAULT_HEADERS,
                 cookies=cookie_jar,
                 timeout=REQUEST_TIMEOUT,
-                verify=False,
+                verify=BDU_VERIFY,
             )
             response.raise_for_status()
 
@@ -216,7 +222,7 @@ def _get_csrf_tokens() -> tuple[Dict[str, str], str]:
     response = requests.get(
         BDU_VUL_URL,
         timeout=REQUEST_TIMEOUT,
-        verify=False,
+        verify=BDU_VERIFY,
         headers=DEFAULT_HEADERS,
     )
     response.raise_for_status()

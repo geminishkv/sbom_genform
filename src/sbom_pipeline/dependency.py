@@ -188,8 +188,8 @@ class Dependency:
             )
             if resp.status_code == 200:
                 return list(resp.json().keys())
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"GitHub languages fetch failed for {repo_path}: {e}")
         return []
 
     # ------------------------------------------------------------------

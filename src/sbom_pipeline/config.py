@@ -81,6 +81,14 @@ class PipelineConfig:
         if self.bdu_cache_dir is None:
             self.bdu_cache_dir = self.dep_check_data.parent / ".bdu_cache"
 
+        # CWE-918/22: clair_endpoint подставляется в urllib.urlopen. Запрещаем
+        # любые схемы кроме http(s):// (например file:// → чтение локальных файлов).
+        if self.clair_endpoint and not self.clair_endpoint.startswith(("http://", "https://")):
+            raise ValueError(
+                "CLAIR_ENDPOINT должен начинаться с http:// или https://, "
+                f"получено: {self.clair_endpoint!r}"
+            )
+
     @classmethod
     def from_env(cls) -> "PipelineConfig":
         """Создать конфиг из переменных окружения."""

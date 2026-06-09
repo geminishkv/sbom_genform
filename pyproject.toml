@@ -51,7 +51,6 @@ dependencies = [
     "openpyxl>=3.1.0",
     "odfpy>=1.4.1",
     "python-docx>=1.1.0",
-    "cryptography>=41.0.0",
     "gitpython>=3.1.40",
     "cyclonedx-bom>=4.0.0",
     "typer>=0.12.0",

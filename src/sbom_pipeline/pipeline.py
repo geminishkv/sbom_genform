@@ -289,12 +289,14 @@ def gen_sbom(cfg: PipelineConfig) -> None:
             )
         else:
             logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
-            assert cfg.project_dir is not None
+            if cfg.project_dir is None:
+                raise RuntimeError("project_dir не задан — внутренняя ошибка маршрутизации источника")
             generate.generate_from_dir(cfg.project_dir, app_bom)
     else:
         # Режим только-образ: создать пустой SBOM-каркас для обогащения Clair
         logging.info("[pipeline] Исходный код не задан — создан пустой SBOM для образа")
-        assert cfg.image_name is not None
+        if cfg.image_name is None:
+            raise RuntimeError("image_name не задан — внутренняя ошибка режима «только образ»")
         _write_empty_sbom(app_bom, cfg.image_name)
 
     if not cfg.skip_clair and not cfg.image_name:
@@ -383,12 +385,14 @@ def run(cfg: PipelineConfig) -> None:
             )
         else:
             logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
-            assert cfg.project_dir is not None
+            if cfg.project_dir is None:
+                raise RuntimeError("project_dir не задан — внутренняя ошибка маршрутизации источника")
             generate.generate_from_dir(cfg.project_dir, app_bom)
     else:
         # Режим только-образ: создать пустой SBOM-каркас для обогащения Clair
         logging.info("[pipeline] Исходный код не задан — создан пустой SBOM для образа")
-        assert cfg.image_name is not None
+        if cfg.image_name is None:
+            raise RuntimeError("image_name не задан — внутренняя ошибка режима «только образ»")
         _write_empty_sbom(app_bom, cfg.image_name)
 
     # Clair: получить пакеты образа и добавить их в SBOM.

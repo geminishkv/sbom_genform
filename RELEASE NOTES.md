@@ -19,6 +19,25 @@
 - Команда `status`: внешний инструмент с ненулевым кодом возврата теперь помечается как «не найден» (раньше строка stderr выводилась как «версия»); проверка cyclonedx-py исправлена на модуль `cyclonedx_py`
 - Новые smoke-тесты на `cert` (без аргумента, `--output`, путь по умолчанию) и `status` (учёт returncode)
 
+### Безопасность
+
+Проведён аудит (bandit + semgrep + pip-audit + ручной анализ), устранены находки:
+
+- **SEC-001** (CWE-532): git-токен больше не утекает в логи/консоль при ошибке клонирования — `clone_from` обёрнут в обработчик, токен маскируется в тексте исключения
+- **SEC-002** (CWE-345): честная терминология — SHA-256 «подпись» это контрольная сумма **целостности**, а не криптоподпись (docstring `sign.py`, README, `verify --help`)
+- **SEC-003** (CWE-295): TLS-проверка БДУ настраивается через `BDU_CA_BUNDLE` вместо жёсткого `verify=False`
+- **SEC-004** (CWE-918): валидация схемы `CLAIR_ENDPOINT` — запрет `file://` и прочих не-`http(s)` схем (защита от SSRF / чтения локальных файлов)
+- **SEC-005 / SEC-006**: устранены молчаливое подавление исключений (`dependency.py`) и `assert` для runtime-инвариантов (`pipeline.py`)
+- **SEC-007**: убрана неиспользуемая зависимость `cryptography`
+- Итоги: bandit HIGH 2→0, semgrep ERROR 2→0, 0 CVE в production-зависимостях; добавлены регрессионные тесты `tests/test_security.py`
+
+### CI / Docker
+
+- `secgensbom.yml`: убран несуществующий флаг `--source local` (ронял шаг прогона), добавлена установка Syft
+- `publish.yml`: `build-push-action` унифицирован на `@v6`; тело GitHub Release берётся из `RELEASE NOTES.md` (`body_path`)
+- `Dockerfile.formatter`: добавлены `COPY LICENSE.md README.md` (без них `pip install` падал), база обновлена до `python:3.13-slim`
+- `.gitignore`: убраны дубли, добавлены `* 2.*`, `.coverage`, `coverage.xml`
+
 ### Добавлено
 
 - Команда CLI `scan` (`secsbom scan <sbom.json>`) — сканирование уязвимостей готового SBOM (шаги 4–8 пайплайна): Clair (опционально), Trivy FS (опционально), Trivy SBOM, Dependency-Check (опционально), дедупликация, слияние, подпись → `merged-bom-signed.json`, экспорт листа уязвимостей
