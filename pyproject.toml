@@ -72,7 +72,7 @@ dev = [
 Homepage     = "https://github.com/geminishkv/sbom_genform"
 Repository   = "https://github.com/geminishkv/sbom_genform"
 Issues       = "https://github.com/geminishkv/sbom_genform/issues"
-Changelog    = "https://github.com/geminishkv/sbom_genform/blob/master/CHANGELOG.md"
+Changelog    = "https://github.com/geminishkv/sbom_genform/blob/master/RELEASE%20NOTES.md"
 
 # ---------------------------------------------------------------------------
 # Entry points — two aliases, one tool
@@ -97,7 +97,7 @@ include = [
     "src/",
     "README.md",
     "LICENSE.md",
-    "CHANGELOG.md",
+    "RELEASE NOTES.md",
     "pyproject.toml",
 ]
 

@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-06-09
+
+### Исправлено
+
+- `cli.py`: устранены дублирующие импорты внутри команды `cert` (перенесены в начало модуля) — чистый `ruff F811/E402`
+- Команда `cert`: запуск без аргумента-файла больше не падает с `AttributeError`, а выводит понятное сообщение об ошибке
+- Команда `cert`: флаг `--output` теперь действительно задаёт путь результата (ранее игнорировался — файл всегда писался как `<input>(cert).json`)
+- Команда `cert`: короткий алиас `-v` снят с `--component-version`, чтобы не конфликтовать с конвенцией `-v` = `--verbose`
+- Команда `status`: внешний инструмент с ненулевым кодом возврата теперь помечается как «не найден» (раньше строка stderr выводилась как «версия»); проверка cyclonedx-py исправлена на модуль `cyclonedx_py`
+- Новые smoke-тесты на `cert` (без аргумента, `--output`, путь по умолчанию) и `status` (учёт returncode)
+
 ### Добавлено
 
 - Команда CLI `scan` (`secsbom scan <sbom.json>`) — сканирование уязвимостей готового SBOM (шаги 4–8 пайплайна): Clair (опционально), Trivy FS (опционально), Trivy SBOM, Dependency-Check (опционально), дедупликация, слияние, подпись → `merged-bom-signed.json`, экспорт листа уязвимостей
@@ -135,6 +146,7 @@
 
 Пайплайн на shell-скриптах. История в git log.
 
-[Unreleased]: https://github.com/geminishkv/sbom_genform/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/geminishkv/sbom_genform/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/geminishkv/sbom_genform/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/geminishkv/sbom_genform/releases/tag/v2.1.0
 [2.0.0]: https://github.com/geminishkv/sbom_genform/releases/tag/v2.0.0

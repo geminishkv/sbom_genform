@@ -12,13 +12,16 @@ CLI точка входа: secsbom / secsbom-pipeline
 
 from __future__ import annotations
 
-import json
-import os
 import ctypes
+import json
+import logging
+import os
 import subprocess
 import sys
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.align import Align
@@ -689,6 +692,8 @@ def cmd_status() -> None:
     def _check(cmd: list[str]) -> str:
         try:
             out = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if out.returncode != 0:
+                return "__not_found__"
             line = (out.stdout or out.stderr or "").strip().splitlines()
             return line[0] if line else "ОК"
         except FileNotFoundError:
@@ -704,7 +709,7 @@ def cmd_status() -> None:
         ("Docker",       ["docker", "--version"]),
         ("Node.js",      ["node", "--version"]),
         ("npx",          ["npx", "--version"]),
-        ("cyclonedx-py", [sys.executable, "-m", "cyclonedx", "--version"]),
+        ("cyclonedx-py", [sys.executable, "-m", "cyclonedx_py", "--version"]),
     ]
 
     t = Table(box=rich_box.ROUNDED, show_header=True, header_style="bold cyan", padding=(0, 2))
@@ -844,13 +849,6 @@ def cmd_diff(
 # ---------------------------------------------------------------------------
 # cert — обогащение полями
 # ---------------------------------------------------------------------------
-from typing import Any, Optional
-from enum import Enum
-from datetime import datetime, timezone
-import typer
-from pathlib import Path
-import json
-import logging
 
 
 class ComponentType(str, Enum):
@@ -864,7 +862,8 @@ class ComponentType(str, Enum):
     firmware = "firmware"
 
 def add_gost_cert_fields(sbom_path: Path, component_name: Optional[str] = None, component_version: Optional[str] = None,
-component_manufacturer: Optional[str] = None, component_type: ComponentType = ComponentType.application) -> Path:
+component_manufacturer: Optional[str] = None, component_type: ComponentType = ComponentType.application,
+output_path: Optional[Path] = None) -> Path:
    
     """Переработка структуры отчета согласно требованиям информационного сообщения ФСТЭК России
     от 13 января 2025 г. N 240/24/38."""
@@ -935,7 +934,7 @@ component_manufacturer: Optional[str] = None, component_type: ComponentType = Co
         else:
             logging.info(f"Поля добавлены в {updated} компонентов")
     
-    cert_path = Path(str(sbom_path).replace('.json', '(cert).json'))
+    cert_path = output_path if output_path is not None else Path(str(sbom_path).replace('.json', '(cert).json'))
     cert_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(cert_path, 'w', encoding='utf-8') as f:
@@ -959,7 +958,6 @@ def cmd_cert(
     component_version: Optional[str] = typer.Option(
         None,
         "--component-version",
-        "-v",
         help="Версия продукта (добавляется в metadata.component)"
     ),
     manufacturer: Optional[str] = typer.Option(
@@ -986,6 +984,10 @@ def cmd_cert(
     setup_logging()
     
     # Обработка ошибок
+    if sbom is None:
+        console.print("[bold red]✗ Не указан путь к SBOM файлу[/bold red]")
+        console.print(" [dim]Пример: secsbom cert sbom.json --component-name 'МЭ' --component-version '72.15' --manufacturer 'ООО Ромашка'[/dim]")
+        raise typer.Exit(code=1)
     if not sbom.exists():
         console.print(f"[bold red]✗ SBOM файл не найден:[/bold red] {sbom}")
         console.print(" [dim]Пример: secsbom cert sbom.json --component-name 'МЭ' --component-version '72.15' --manufacturer 'ООО Ромашка'[/dim]")
@@ -1001,19 +1003,19 @@ def cmd_cert(
     
     try:
         cert_sbom = add_gost_cert_fields(
-            sbom, 
+            sbom,
             component_name=component_name,
             component_version=component_version,
             component_manufacturer=manufacturer,
-            component_type=component_type
+            component_type=component_type,
+            output_path=output,
         )
     except Exception as e:
         console.print(f"[bold red]✗ Ошибка добавления полей ✗[/bold red] {e}")
-        raise typer.Exit(code=1)
-    
-    output_path = output or cert_sbom
-    console.print(f"[bold green]✓ Поля успешно добавлены ✓ [/bold green]")
-    console.print(f"[dim]→ Результат: {output_path}[/dim]")
+        raise typer.Exit(code=1) from e
+
+    console.print("[bold green]✓ Поля успешно добавлены ✓[/bold green]")
+    console.print(f"[dim]→ Результат: {cert_sbom}[/dim]")
     _print_footer()
 
 # ---------------------------------------------------------------------------

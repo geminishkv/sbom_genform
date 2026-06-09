@@ -1060,3 +1060,85 @@ def test_merge_vulns_into_sbom_accepts_bdu_cache_dir_kwarg(tmp_path):
     # Should not raise even with an explicit cache_dir and no findings.
     result = merge_vulns_into_sbom(sbom, [], enable_bdu=False, bdu_cache_dir=tmp_path)
     assert result["bomFormat"] == "CycloneDX"
+
+
+# ---------------------------------------------------------------------------
+# cert — обогащение полями ГОСТ/ФСТЭК
+# ---------------------------------------------------------------------------
+
+def test_cert_no_argument_exits_cleanly(monkeypatch):
+    """cert без аргумента: аккуратная ошибка, а не AttributeError на None.exists()."""
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["cert"])
+
+    assert result.exit_code == 1
+    assert "Не указан путь" in result.stdout
+    assert not isinstance(result.exception, AttributeError)
+
+
+def test_cert_writes_to_output_flag(tmp_path, monkeypatch):
+    """cert --output <path>: результат пишется именно в указанный путь."""
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+
+    src = tmp_path / "in.json"
+    src.write_text(json.dumps(_MINIMAL_SBOM), encoding="utf-8")
+    out = tmp_path / "custom-cert.json"
+
+    result = _CLI_RUNNER.invoke(cli.app, [
+        "cert", str(src),
+        "--component-name", "Test",
+        "--component-version", "1.0",
+        "--output", str(out),
+    ])
+
+    assert result.exit_code == 0, result.stdout
+    assert out.exists()
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["metadata"]["component"]["name"] == "Test"
+    names = {p["name"] for p in data["components"][0].get("properties", [])}
+    assert "GOST: attack_surface" in names
+    assert "GOST: security_function" in names
+
+
+def test_cert_default_output_path(tmp_path, monkeypatch):
+    """cert без --output: создаётся <input>(cert).json рядом с исходником."""
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+
+    src = tmp_path / "in.json"
+    src.write_text(json.dumps(_MINIMAL_SBOM), encoding="utf-8")
+
+    result = _CLI_RUNNER.invoke(cli.app, [
+        "cert", str(src),
+        "--component-name", "X",
+        "--component-version", "1",
+    ])
+
+    assert result.exit_code == 0, result.stdout
+    assert (tmp_path / "in(cert).json").exists()
+
+
+# ---------------------------------------------------------------------------
+# status — учёт returncode внешних инструментов
+# ---------------------------------------------------------------------------
+
+def test_status_marks_nonzero_rc_as_not_found(monkeypatch):
+    """status: ненулевой код возврата → «не найден», а не «доступен» с мусором stderr."""
+    class _FakeProc:
+        returncode = 1
+        stdout = "No module named pip"
+        stderr = ""
+
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: _FakeProc())
+    monkeypatch.setattr(cli, "_print_banner", lambda: None)
+    monkeypatch.setattr(cli, "_print_footer", lambda: None)
+
+    result = _CLI_RUNNER.invoke(cli.app, ["status"])
+
+    assert result.exit_code == 0
+    assert "не найден" in result.stdout
+    # Мусорная строка ошибки не должна выводиться как «версия»
+    assert "No module named pip" not in result.stdout

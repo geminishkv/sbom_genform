@@ -2,11 +2,6 @@
 .DS_Store
 .DS_Store?
 ._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-.DS_Store
 .AppleDouble
 .LSOverride
 .DocumentRevisions-V100
@@ -16,7 +11,13 @@ Thumbs.db
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
+ehthumbs.db
+Thumbs.db
 *.icloud
+
+# iCloud sync duplicates (e.g. "cli 2.py", "sbom 2/")
+* 2.*
+* 2
 
 # Python cache and compiled files
 __pycache__/
@@ -55,7 +56,7 @@ secgensbom_reports/
 reports/
 .dependency-check-data/
 .bdu_cache/
-
+.nvd_cache/
 
 # Generated report files (keep examples/ intact)
 *.sig
