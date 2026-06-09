@@ -1,6 +1,6 @@
 name: SecGenSBOM
 
-# Запуск пайплайна на каждый push в main или вручную
+# Запуск пайплайна вручную или на push в ветку securitycheck
 on:
   workflow_dispatch:
   push:
@@ -26,12 +26,16 @@ jobs:
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
 
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin
+
       - name: Run pipeline
         env:
           SKIP_CLAIR: "true"
         run: |
           secsbom-pipeline run \
-            --source local \
             --path examples/project_inject \
             --output-dir $GITHUB_WORKSPACE/secgensbom_out \
             --reports-dir $GITHUB_WORKSPACE/secgensbom_reports
