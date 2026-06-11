@@ -423,7 +423,18 @@ docker run --rm \
   geminishkv/sbom-pipeline:latest
 ```
 
-**Полный стек (Trivy + Dependency-Check + Clair)** через `docker-compose.yml`:
+**Полный стек (Trivy + Dependency-Check + Clair)** через `docker-compose.yml`.
+
+**Всё одной командой** (компоненты + контейнерный образ + уязвимости + БДУ + SBOM + отчёты, без NVD-ключа):
+
+```bash
+SKIP_CLAIR=false BDU=true IMAGE_NAME=nginx:latest docker compose up --build
+```
+
+- код берётся из `./examples/project_inject` (замените содержимое на свой проект); `IMAGE_NAME` — контейнерный образ для Clair
+- без `NVD_API_KEY` база NVD скачается автоматически и кэшируется в `./.dependency-check-data`; результат → `./secgensbom_out/` + `./secgensbom_reports/{excel,docx,odt}/`
+
+Только демо-проект, без сканирования образа:
 
 ```bash
 docker compose up --build

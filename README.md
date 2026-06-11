@@ -373,7 +373,23 @@ docker run --rm \
 
 ### Docker Compose (Trivy + Dependency-Check + Clair)
 
-Полный стек с OWASP Dependency-Check и Clair v4 запускается через `docker-compose.yml`:
+Полный стек с OWASP Dependency-Check и Clair v4 запускается через `docker-compose.yml`.
+
+#### Всё одной командой (компоненты + контейнеры + SBOM + отчёты)
+
+Поднимает Clair, собирает SBOM по исходному коду, сканирует уязвимости (Trivy + Dependency-Check + Clair) и контейнерный образ, обогащает БДУ ФСТЭК и выгружает отчёты — **NVD-ключ не нужен**:
+
+```bash
+SKIP_CLAIR=false BDU=true IMAGE_NAME=nginx:latest docker compose up --build
+```
+
+- **Код проекта** берётся из `./examples/project_inject` — замените содержимое этой папки на свой проект (или переопределите volume `secgensbom` в `docker-compose.yml`).
+- **`IMAGE_NAME`** — контейнерный образ для сканирования через Clair (по умолчанию `postgres:14`).
+- **`SKIP_CLAIR=false`** включает анализ контейнерного образа; **`BDU=true`** добавляет идентификаторы БДУ ФСТЭК.
+- **Без `NVD_API_KEY`** база NVD для Dependency-Check скачается автоматически при первом запуске (~220 МБ, несколько минут; она кэшируется в `./.dependency-check-data` и переиспользуется далее). Clair на первом запуске прогревает updater'ы до ~10 минут.
+- **Результат**: `./secgensbom_out/` (SBOM-артефакты) + `./secgensbom_reports/{excel,docx,odt}/` (отчёты по компонентам и уязвимостям).
+
+Минимальный запуск (только демо-проект, без сканирования образа):
 
 ```bash
 docker compose up --build
