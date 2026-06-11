@@ -31,15 +31,22 @@
 
 ## Навигация
 
+**Документация** (`docs/`):
+
 - [**Руководство пользователя**](docs/USAGE.md#руководство-пользователя) — быстрый старт
 - [**Полное руководство (Manual)**](docs/MANUAL.md) — все команды, флаги и примеры
-- [Установка](#установка)
-- [Выходные артефакты](#выходные-артефакты)
-- [Примеры результатов](docs/RESULT_EXAMPLES.md#примеры-результатов)
-- [BDU Enrichment](#bdu-enrichment)
-- [Docker](#docker)
-- [Troubleshooting](docs/TROUBLESHOOTING.md#troubleshooting)
-- [Архитектура](#архитектура)
+- [**Демонстрация команд**](docs/demo/DEMO.md#демонстрация-работы-команд) — гифки работы CLI
+- [**Примеры результатов**](docs/RESULT_EXAMPLES.md#примеры-результатов) — образцы SBOM и отчётов
+- [**Права доступа**](docs/PERMISSIONS.md#required-filesystem-permissions) — требования к файловой системе
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md#troubleshooting) — частые проблемы и их решения
+
+**Разделы README:**
+
+- [**Установка**](#установка)
+- [**Выходные артефакты**](#выходные-артефакты)
+- [**BDU Enrichment**](#bdu-enrichment)
+- [**Docker**](#docker)
+- [**Архитектура**](#архитектура)
 
 **Что делает:**
 
