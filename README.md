@@ -356,6 +356,8 @@ secsbom run
 OWASP Dependency-Check запускается внутри утилиты через `docker run` (Docker-in-Docker), его Java-зависимость утяжелила бы основной образ на ~400 МБ.
 Clair требует отдельного работающего HTTP-сервера — поэтому он вынесен в `docker-compose.yml`.
 
+**Безопасность образа:** контейнер работает от непривилегированного пользователя `sbom` (uid 1001) — `secsbom` отказывается запускаться от root. В `docker-compose.yml` сервисам `secgensbom` / `scan` заданы `security_opt: no-new-privileges` и `cap_drop: ALL`. В образ встроен `HEALTHCHECK`, OCI-метки указывают лицензию Apache-2.0.
+
 ### Docker Hub (только Trivy, без Clair/Dependency-Check)
 
 ```bash

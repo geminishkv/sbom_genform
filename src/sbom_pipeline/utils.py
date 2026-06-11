@@ -78,4 +78,4 @@ def detect_git_service(url: str) -> str :
     elif "github" in domain:
         return SOURCE_TYPE_GITHUB
 
-    raise Exception("Unexpted git service, gitlab or github available")
+    raise ValueError(f"Неизвестный git-сервис в URL: {url!r}. Поддерживаются github и gitlab.")

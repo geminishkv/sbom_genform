@@ -1,4 +1,10 @@
-# macOS
+# VCS
+.git
+.gitignore
+.gitattributes
+.github/
+
+# OS / macOS
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -8,64 +14,60 @@ Icon?
 .Trashes
 ehthumbs.db
 Thumbs.db
+* 2.*
 
-# VCS
-.git
-.gitignore
-.gitattributes
-
-# Python/venv
+# Python / build / venv
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.pyd
 *.so
 *.egg-info/
 .eggs/
-*.log
+dist/
+build/
+venv/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# Secrets / env
 .env
 .env.*
 *.env
-venv/
-.venv/
 
-# Node/npm/yarn
+# Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 
-# Docker, artifacts, testcases
-Dockerfile*
-*.dockerfile
-*.tar
-secgensbom_out/
-sca_reports/
-reports/
-sbom/
-.coverage
-htmlcov/
-pytest.cache/
-.tox/
-.mypy_cache/
-.pytest_cache/
+# Тесты и ассеты — не нужны в образе (docs/ нужны: COPY docs/ в Dockerfile)
+tests/
+assets/
 
-# IDE/Editor
-.vscode/
-.idea/
+# Пайплайн-выводы и кэши (генерируемое)
+secgensbom_out/
+secgensbom_reports/
+reports/
+.dependency-check-data/
+.bdu_cache/
+.nvd_cache/
+*.sig
+
+# Логи / temp / архивы / дампы
+*.log
+logs/
+*.pid
 *.swp
 *.swo
 *.bak
 *.tmp
-
-# Логи приложения
-*.log
-script/app.log
-
-# Разное архивы/дампы
 *.zip
+*.tar
 *.tar.gz
 *.tgz
 *.gz
@@ -75,3 +77,15 @@ script/app.log
 *.sql
 *.sqlite
 *.db
+
+# IDE
+.vscode/
+.idea/
+
+# Docker / compose (Dockerfile подаётся через -f, в образе не нужен)
+Dockerfile*
+*.dockerfile
+docker-compose*.yml
+
+# Claude
+.claude/

@@ -25,7 +25,7 @@ _SEVERITY_MAP = {
     "4": "HIGH",
     "5": "CRITICAL",
     # string fallbacks (older versions)
-    "Unknown": "NOT_STATED",
+    "Unknown": "UNKNOWN",
     "Negligible": "LOW",
     "Low": "LOW",
     "Medium": "MEDIUM",
@@ -585,12 +585,12 @@ def enrich_sbom_with_clair_packages(
     image_name: str = "",
 ) -> Dict[str, Any]:
     """
-    Обновить или добавить компоненты SBOM данными из отчёта Clair:
+    Добавить в SBOM компоненты из отчёта Clair (пакеты контейнерного образа).
 
-    • Если компонент с совпадающим (name, version) уже есть в SBOM —
-      он обновляется свойствами container_image / container_role / os_distribution.
-    • Если такого компонента в SBOM нет — он добавляется как новый компонент
-      типа «library» с PURL, сформированным по типу пакета (deb / golang).
+    Каждый пакет образа добавляется как новый компонент типа «library» с PURL по
+    типу пакета (deb / golang) и свойствами container_image / container_role /
+    os_distribution. Существующие компоненты НЕ изменяются — последующая
+    дедупликация (dedup.py) объединит совпадающие записи из обоих источников.
 
     Если файл отчёта не существует или не содержит валидного JSON, функция
     возвращает SBOM без изменений.

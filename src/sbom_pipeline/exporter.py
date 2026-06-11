@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -95,12 +94,18 @@ class Exporter:
         try:
             vuln_columns = self._vuln_columns()
             with pd.ExcelWriter(str(path), engine="openpyxl") as writer:
+                sheets = 0
                 if include_components:
                     comp_df = pd.DataFrame(self._comp_rows(), columns=_COMP_COLUMNS)
                     comp_df.to_excel(writer, index=False, sheet_name="Компоненты")
+                    sheets += 1
                 if include_vulns:
                     vuln_df = pd.DataFrame(self._vuln_rows(), columns=vuln_columns)
                     vuln_df.to_excel(writer, index=False, sheet_name="Уязвимости")
+                    sheets += 1
+                if sheets == 0:
+                    # openpyxl требует хотя бы один лист (BUG-013)
+                    pd.DataFrame(columns=vuln_columns).to_excel(writer, index=False, sheet_name="Уязвимости")
             self._write_sig(path)
             logging.info(f"[exporter] Excel → {path}")
         except Exception as e:
@@ -221,16 +226,12 @@ class Exporter:
     def _comp_rows(self) -> List[Dict[str, Any]]:
         rows = []
         for i, dep in enumerate(self.deps, start=1):
-            dep_types: list = [
-                t for t in (getattr(dep, "dep_type", None) or getattr(dep, "depType", []) or [])
-                if isinstance(t, str)
-            ]
-            attack_surface = ", ".join(
-                t for t in dep_types if "attack" in t.lower() or "поверхность" in t.lower()
-            ) or getattr(dep, "attack_surface", "")
-            security_func = ", ".join(
-                t for t in dep_types if "security" in t.lower() or "безопасност" in t.lower()
-            ) or getattr(dep, "security_function", "")
+            # GOST-колонки берём из явных полей dep.attack_surface / security_function
+            # (заполняются из соответствующих свойств через _find_prop). Раньше здесь
+            # фильтровались ВСЕ значения depType по "attack"/"security", из-за чего в
+            # колонки попадал мусор от случайных совпадений (BUG-003).
+            attack_surface = getattr(dep, "attack_surface", "")
+            security_func = getattr(dep, "security_function", "")
             rows.append({
                 _COMP_COLUMNS[0]: i,
                 _COMP_COLUMNS[1]: getattr(dep, "name", ""),

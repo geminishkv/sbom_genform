@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.title="sbom-pipeline" \
       org.opencontainers.image.description="SBOM Generator & Formatter — CycloneDX 1.5, Syft, Trivy, OWASP Dependency-Check" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.source="https://github.com/geminishkv/sbom_genform" \
-      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.authors="Elijah S Shmakov"
 
 # --- Системные зависимости + Docker CLI ---
@@ -51,6 +51,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # --- Python-пакет sbom-pipeline ---
 WORKDIR /app
 COPY pyproject.toml LICENSE.md README.md ./
+COPY docs/ ./docs/
 COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir . \
@@ -72,6 +73,10 @@ ENV PYTHONUNBUFFERED=1 \
     SOURCE=local
 
 VOLUME ["/app/project_inject", "/app/secgensbom_out", "/app/secgensbom_reports"]
+
+# --- Healthcheck: CLI и его зависимости отвечают ---
+HEALTHCHECK --interval=5m --timeout=10s --start-period=10s --retries=3 \
+    CMD secsbom --version >/dev/null 2>&1 || exit 1
 
 # --- Запуск от имени непривилегированного пользователя ---
 USER sbom

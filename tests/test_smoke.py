@@ -1142,3 +1142,105 @@ def test_status_marks_nonzero_rc_as_not_found(monkeypatch):
     assert "не найден" in result.stdout
     # Мусорная строка ошибки не должна выводиться как «версия»
     assert "No module named pip" not in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Багфиксы: .sig целостность и флаги генераторов
+# ---------------------------------------------------------------------------
+
+def test_sig_file_matches_ondisk_file_hash(tmp_path):
+    """BUG-001: .sig содержит SHA-256 записанного файла (для внешней `shasum` проверки)."""
+    import hashlib
+
+    src = tmp_path / "in.json"
+    src.write_text(json.dumps(_MINIMAL_SBOM), encoding="utf-8")
+    out = tmp_path / "signed.json"
+    sign_sbom(src, out)
+
+    sig = (tmp_path / "signed.sig").read_text(encoding="utf-8").strip().replace("SHA256=", "")
+    actual = hashlib.sha256(out.read_bytes()).hexdigest()
+    assert sig == actual, ".sig должен совпадать с sha256 файла на диске"
+
+
+def test_gen_sbom_supports_generator_flags():
+    """БАГ #4: команда gen-sbom принимает --no-cdxgen / --no-syft (раньше падала «No such option»)."""
+    result = _CLI_RUNNER.invoke(cli.app, ["gen-sbom", "--help"])
+    assert result.exit_code == 0
+    assert "--no-syft" in result.stdout
+    assert "--no-cdxgen" in result.stdout
+
+
+def test_run_passes_generator_flags_to_generate(monkeypatch, tmp_path):
+    """БАГ #3: pipeline передаёт use_cdxgen/use_syft в generate (флаги реально работают)."""
+    from sbom_pipeline import pipeline
+    from sbom_pipeline.config import PipelineConfig
+
+    captured: dict = {}
+
+    def fake_gen_dir(project_dir, output_file, **kwargs):
+        captured.update(kwargs)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(json.dumps(_MINIMAL_SBOM), encoding="utf-8")
+
+    monkeypatch.setattr(pipeline.generate, "generate_from_dir", fake_gen_dir)
+
+    cfg = PipelineConfig(project_dir=tmp_path, use_syft=False, use_cdxgen=True,
+                         output_dir=tmp_path / "out", reports_dir=tmp_path / "rep")
+    pipeline.gen_sbom(cfg)
+
+    assert captured.get("use_syft") is False
+    assert captured.get("use_cdxgen") is True
+
+
+# ---------------------------------------------------------------------------
+# Багфиксы: CVSS-парсинг, recommendation, format
+# ---------------------------------------------------------------------------
+
+def test_trivy_extract_cvss_handles_bad_values():
+    """BUG-009: _extract_cvss не падает на строке-диапазоне/None CVSS."""
+    from sbom_pipeline.scanner.trivy import _extract_cvss
+
+    assert _extract_cvss({"nvd": {"V3Score": "7.5-8.0"}}) == 0.0
+    assert _extract_cvss({"nvd": {"V3Score": None}}) == 0.0
+    assert _extract_cvss({"nvd": {"V3Score": 9.8}}) == 9.8
+
+
+def test_scanner_recommendation_goes_into_sbom():
+    """BUG-011: рекомендация сканера попадает в SBOM vulnerabilities[]."""
+    finding = VulnFinding(
+        cve_id="CVE-2020-0001", component_name="x", component_version="1.0",
+        component_purl="pkg:pypi/x@1.0", cvss_score=7.5, severity="high",
+        description="d", scanner="trivy", recommendation="https://avd.example/cve",
+    )
+    sbom = {"bomFormat": "CycloneDX", "specVersion": "1.5",
+            "components": [{"type": "library", "name": "x", "version": "1.0",
+                            "purl": "pkg:pypi/x@1.0", "bom-ref": "x1"}]}
+    result = merge_vulns_into_sbom(sbom, [finding])
+    assert result["vulnerabilities"][0]["recommendation"] == "https://avd.example/cve"
+
+
+def test_format_extracts_vulnerabilities_from_sbom(tmp_path):
+    """BUG-013: format показывает уязвимости из готового SBOM (лист не пустой)."""
+    import openpyxl
+
+    sbom = {
+        "bomFormat": "CycloneDX", "specVersion": "1.5",
+        "components": [{"type": "library", "name": "x", "version": "1.0",
+                        "purl": "pkg:pypi/x@1.0", "bom-ref": "x1"}],
+        "vulnerabilities": [{
+            "id": "CVE-2020-0001", "source": {"name": "TRIVY"},
+            "ratings": [{"score": 7.5, "severity": "high"}],
+            "description": "demo", "affects": [{"ref": "x1"}],
+            "recommendation": "https://avd.example/cve",
+        }],
+    }
+    sbom_dir = tmp_path / "out"
+    sbom_dir.mkdir()
+    (sbom_dir / "bom.json").write_text(json.dumps(sbom), encoding="utf-8")
+    rep = tmp_path / "rep"
+    format_sboms(sbom_dir, rep)
+
+    wb = openpyxl.load_workbook(rep / "excel" / "bom.xlsx")
+    assert "Уязвимости" in wb.sheetnames
+    rows = list(wb["Уязвимости"].iter_rows(values_only=True))
+    assert any("CVE-2020-0001" in str(c) for r in rows for c in r), "уязвимость должна быть в Excel"

@@ -33,9 +33,9 @@ def sign_sbom(input_path: Path, output_path: Path) -> Path:
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(signed, f, indent=2, ensure_ascii=False)
 
-    # .sig — хэш итогового файла для внешней проверки
-    canonical = json.dumps(signed, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    digest = hashlib.sha256(canonical.encode()).hexdigest()
+    # .sig — SHA-256 от записанного на диск файла, чтобы внешняя проверка
+    # `shasum -a 256 <file>` совпадала со значением в .sig (BUG-001).
+    digest = hashlib.sha256(output_path.read_bytes()).hexdigest()
     sig_path = output_path.with_suffix(".sig")
     sig_path.write_text(f"SHA256={digest}\n", encoding="utf-8")
 

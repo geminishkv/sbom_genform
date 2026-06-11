@@ -6,66 +6,54 @@
 
 ---
 
-## [Unreleased]
-
-## [2.2.0] — 2026-06-09
+## [2.2.0]
 
 ### Исправлено
 
-- `cli.py`: устранены дублирующие импорты внутри команды `cert` (перенесены в начало модуля) — чистый `ruff F811/E402`
-- Команда `cert`: запуск без аргумента-файла больше не падает с `AttributeError`, а выводит понятное сообщение об ошибке
-- Команда `cert`: флаг `--output` теперь действительно задаёт путь результата (ранее игнорировался — файл всегда писался как `<input>(cert).json`)
-- Команда `cert`: короткий алиас `-v` снят с `--component-version`, чтобы не конфликтовать с конвенцией `-v` = `--verbose`
-- Команда `status`: внешний инструмент с ненулевым кодом возврата теперь помечается как «не найден» (раньше строка stderr выводилась как «версия»); проверка cyclonedx-py исправлена на модуль `cyclonedx_py`
-- Новые smoke-тесты на `cert` (без аргумента, `--output`, путь по умолчанию) и `status` (учёт returncode)
+- `cli.py`: устранены дублирующие импорты внутри команды `cert`
+- Команда `cert`: запуск без аргумента-файла больше не падает с `AttributeError`
+- Флаги `--no-cdxgen` / `--no-syft` теперь работают — `pipeline` передаёт `use_cdxgen`/`use_syft` в генератор
+- Имена промежуточных SBOM: `app-bom-cdxgen.json` / `app-bom-syft.json`
+- Команда `gen-sbom`: добавлены флаги `--cdxgen` / `--syft`
+- `.sig` содержит SHA-256 **записанного на диск файла** — внешняя проверка `shasum -a 256 <file>` совпадает
+- `recommendation` сканера (PrimaryURL / Links / notes) попадает в SBOM `vulnerabilities[]`
+- GOST-колонки отчёта берутся из явных полей `attack_surface`/`security_function`
+- Clair: severity `"Unknown"` → `UNKNOWN` (был нестандартный `NOT_STATED`)
+- `format` извлекает уязвимости из готового SBOM
+- Регрессионные тесты на ключевые фиксы
+- `secgensbom.yml`: убран несуществующий флаг `--source local` (ронял шаг прогона), добавлена установка Syft
+- `ci.yml`: новый job **`docker`** — сборка образа `Dockerfile.secgensbom` (без push) + smoke-test `secsbom --version` на каждый push/PR (ловит сломанный Dockerfile до релиза)
+- `Dockerfile.secgensbom`: OCI-лицензия исправлена `MIT` → `Apache-2.0`, добавлен `HEALTHCHECK`
+- `Dockerfile.formatter`: исправлен запуск от root — добавлен непривилегированный `sbom` (uid 1001), иначе `is_admin`-guard блокировал запуск контейнера; добавлены OCI-метки, `HEALTHCHECK`, `COPY LICENSE.md README.md`, корректные `VOLUME`; база `python:3.13-slim`
+- `docker-compose.yml`: сервисам `secgensbom` / `scan` заданы `security_opt: no-new-privileges` и `cap_drop: ALL`
+- `depcheck`: логирует путь и размер используемой базы NVD — видно, переиспользуется ли существующая база или качается заново
+- `PipelineConfig.from_env()` не использует `examples/project_inject` как fallback для `PROJECT_DIR`
+- `pipeline.run`: Trivy FS и Dependency-Check выполняются только при наличии `cfg.project_dir`
+- Описания опции `--path` в CLI и таблице help-а очищены от упоминания `examples/project_inject` как значения по умолчанию
+- Trivy SBOM-сканирование теперь использует `app-bom-dedup-signed.json` вместо `app-bom-dedup.json`
+- `pipeline._extract_dependencies()` обогащает объекты `Dependency` атрибутами `package_type`, `attack_surface`, `security_function`, `container_image`, `container_role` на основе данных SBOM
+- `scanner/trivy.py`, `scanner/clair.py`, `scanner/depcheck.py` — парсеры заполняют `recommendation` и `acceptability_status` из соответствующих полей каждого сканера
+
+---
 
 ### Безопасность
 
-Проведён аудит (bandit + semgrep + pip-audit + ручной анализ), устранены находки:
+Проведён аудит (bandit, semgrep, pip-audit, ручной анализ), устранены находки:
 
-- **SEC-001** (CWE-532): git-токен больше не утекает в логи/консоль при ошибке клонирования — `clone_from` обёрнут в обработчик, токен маскируется в тексте исключения
-- **SEC-002** (CWE-345): честная терминология — SHA-256 «подпись» это контрольная сумма **целостности**, а не криптоподпись (docstring `sign.py`, README, `verify --help`)
-- **SEC-003** (CWE-295): TLS-проверка БДУ настраивается через `BDU_CA_BUNDLE` вместо жёсткого `verify=False`
-- **SEC-004** (CWE-918): валидация схемы `CLAIR_ENDPOINT` — запрет `file://` и прочих не-`http(s)` схем (защита от SSRF / чтения локальных файлов)
-- **SEC-005 / SEC-006**: устранены молчаливое подавление исключений (`dependency.py`) и `assert` для runtime-инвариантов (`pipeline.py`)
-- **SEC-007**: убрана неиспользуемая зависимость `cryptography`
-- Итоги: bandit HIGH 2→0, semgrep ERROR 2→0, 0 CVE в production-зависимостях; добавлены регрессионные тесты `tests/test_security.py`
-
-### CI / Docker
-
-- `secgensbom.yml`: убран несуществующий флаг `--source local` (ронял шаг прогона), добавлена установка Syft
-- `publish.yml`: `build-push-action` унифицирован на `@v6`; тело GitHub Release берётся из `RELEASE NOTES.md` (`body_path`)
-- `Dockerfile.formatter`: добавлены `COPY LICENSE.md README.md` (без них `pip install` падал), база обновлена до `python:3.13-slim`
-- `.gitignore`: убраны дубли, добавлены `* 2.*`, `.coverage`, `coverage.xml`
-
-### Добавлено
-
-- Команда CLI `scan` (`secsbom scan <sbom.json>`) — сканирование уязвимостей готового SBOM (шаги 4–8 пайплайна): Clair (опционально), Trivy FS (опционально), Trivy SBOM, Dependency-Check (опционально), дедупликация, слияние, подпись → `merged-bom-signed.json`, экспорт листа уязвимостей
-- Команда CLI `gen-sbom` (`secsbom gen-sbom`) — генерация SBOM (шаги 1–3) + экспорт листа компонентов: генерация из источника, Clair-обогащение пакетами (опционально), дедупликация, подпись → `app-bom-dedup-signed.json`
-- Функция `pipeline.scan_only(sbom_path, cfg)` — оркестратор шагов 4–8
-- Функция `pipeline.gen_sbom(cfg)` — оркестратор шагов 1–3 + экспорт компонентов
-- Хелпер `pipeline._write_empty_sbom(path, image_name)` — создаёт минимальный CycloneDX SBOM-каркас для режима «только образ»
-- Поддержка режима **только контейнерный образ** (`--image myimage:tag --clair`): `gen-sbom` и `run` без `--path`/`--url` создают SBOM из пакетов Clair без генерации по исходному коду
-- Флаги `include_components` / `include_vulns` в методах `Exporter.exportToExcel`, `exportToDocx`, `exportToOdt` — управляют набором листов/секций без создания отдельных методов
-- Параметры `include_components`, `include_vulns`, `sbom_file` в `pipeline._export_reports` — унифицированный экспорт для всех режимов
-- Новые тесты:
-  - `tests/unit/sbom_pipeline/test_scan_only.py` — 19 юнит-тестов (классы `TestScanOnlySmoke`, `TestClairSkipping`, `TestScannerCallArguments`, `TestCvssCrossPopulate`, `TestVulnReport`, `TestDeduplication`)
-  - `tests/unit/sbom_pipeline/test_gen_sbom.py` — 19 юнит-тестов (классы `TestGenSbomSmoke`, `TestIntermediateArtefacts`, `TestSourceRouting`, `TestClairEnrichment`)
-  - CLI smoke-тесты в `tests/test_smoke.py`: 8 тест-кейсов для команды `scan`, 6 — для `gen-sbom`
-
-### Изменено
-
-- `PipelineConfig.project_dir` теперь `Optional[Path] = None` (ранее — `Path("examples/project_inject")`); значение по умолчанию больше не подставляется автоматически
-- `PipelineConfig.from_env()` не использует `examples/project_inject` как fallback для `PROJECT_DIR`
-- `pipeline.scan_only`: Trivy FS и Dependency-Check пропускаются, если `cfg.project_dir is None`; Trivy SBOM выполняется всегда
-- `pipeline.gen_sbom` и `pipeline.run`: если не задан ни один источник (нет `--path`/`--url` и нет `--image --clair`) — выбрасывается `ValueError`
-- `pipeline.run`: Trivy FS и Dependency-Check выполняются только при наличии `cfg.project_dir`
-- Описания опции `--path` в CLI и таблице help-а очищены от упоминания `examples/project_inject` как значения по умолчанию
+- (CWE-532): git-токен больше не утекает в логи/консоль при ошибке клонирования — `clone_from` обёрнут в обработчик, токен маскируется в тексте исключения
+- (CWE-345): честная терминология — SHA-256 «подпись» это контрольная сумма **целостности**, а не криптоподпись (docstring `sign.py`, README, `verify --help`)
+- (CWE-295): TLS-проверка БДУ настраивается через `BDU_CA_BUNDLE` вместо жёсткого `verify=False`
+- (CWE-918): валидация схемы `CLAIR_ENDPOINT` — запрет `file://` и прочих не-`http(s)` схем (защита от SSRF / чтения локальных файлов)
+- Устранены молчаливое подавление исключений (`dependency.py`) и `assert` для runtime-инвариантов (`pipeline.py`)
 
 ---
 
 ### Добавлено
 
+- Команда CLI `scan` (`secsbom scan <sbom.json>`) — сканирование уязвимостей готового SBOM (шаги 4–8 пайплайна): Clair (опционально), Trivy FS (опционально), Trivy SBOM, Dependency-Check (опционально), дедупликация, слияние, подпись → `merged-bom-signed.json`, экспорт листа уязвимостей
+- Поддержка режима **только контейнерный образ** (`--image myimage:tag --clair`): `gen-sbom` и `run` без `--path`/`--url` создают SBOM из пакетов Clair без генерации по исходному коду
+- Флаги `include_components` / `include_vulns` в методах `Exporter.exportToExcel`, `exportToDocx`, `exportToOdt` — управляют набором листов/секций без создания отдельных методов
+- Параметры `include_components`, `include_vulns`, `sbom_file` в `pipeline._export_reports` — унифицированный экспорт для всех режимов
 - **Новые колонки отчёта «Компоненты»**:
   - `Тип пакета / тип компонента` — тип экосистемы из PURL (например, `pypi`, `maven`, `npm`, `apk`)
   - `PURL / технический идентификатор компонента` — полный PURL компонента
@@ -78,35 +66,14 @@
   - `Статус допустимости в рассматриваемой конфигурации` — из поля `Status` отчёта Trivy (`fixed`, `affected`, `will_not_fix`, `end_of_life` и др.)
 - Опциональное BDU-обогащение уязвимостей через `--bdu` и переменную окружения `BDU`
 - Выгрузка `BDU / ID` в Excel, Word и ODT отчёты
-- BDU ID в CycloneDX SBOM теперь сохраняется в `vulnerabilities[].properties[]` как `ru.fstec.bdu:id`
 - Дедупликация уязвимостей (`dedup.dedup_vulns`): одна и та же CVE в одном компоненте из нескольких сканеров сводится к одной записи с наибольшим CVSS-баллом; ключ — `CVE-ID::purl` (или `CVE-ID::name@version` при отсутствии PURL)
 - Два подписанных SBOM на выходе пайплайна:
   - `app-bom-dedup-signed.json` + `app-bom-dedup-signed.sig` — SBOM без уязвимостей (SHA-256 подпись после дедупликации компонентов, до сканирования)
   - `merged-bom-signed.json` + `merged-bom-signed.sig` — SBOM с уязвимостями (SHA-256 подпись после слияния)
-- Новая константа `SIGNED_DEDUP_BOM_FILE = "app-bom-dedup-signed.json"` в `constants.py`
-- Пересмотренный порядок шагов пайплайна (8 шагов вместо 6):
-  1. Генерация → 2. Дедупликация компонентов → 3. Подпись (без уязв.) → 4. Сканирование → 5. Дедупликация уязвимостей → 6. Слияние → 7. Подпись (с уязв.) → 8. Экспорт
-- Новые тесты в `tests/test_smoke.py`:
-  - `test_dedup_vulns_*` (7 тест-кейсов для `dedup_vulns`)
-  - `test_sign_sig_file_named_after_output` — имя `.sig` соответствует имени выходного JSON
-  - `test_two_signed_sboms_are_independent` — оба SBOM независимо верифицируемы
-  - `test_two_sig_files_are_distinct` — `.sig` файлы не совпадают
-- Новый файл `tests/unit/sbom_pipeline/test_dedup_vulns.py` с 18 юнит-тестами для `dedup_vulns` (классы `TestDedupByCveAndComponent`, `TestCvssSelection`, `TestFallbackKey`, базовые контракты)
-
-### Изменено
-
-- Trivy SBOM-сканирование теперь использует `app-bom-dedup-signed.json` вместо `app-bom-dedup.json`
-- README: обновлена таблица артефактов и диаграмма Mermaid
-- `pipeline._extract_dependencies()` обогащает объекты `Dependency` атрибутами `package_type`, `attack_surface`, `security_function`, `container_image`, `container_role` на основе данных SBOM
-- `scanner/trivy.py`, `scanner/clair.py`, `scanner/depcheck.py` — парсеры заполняют `recommendation` и `acceptability_status` из соответствующих полей каждого сканера
-- Разделена объединённая колонка «Принадлежность к поверхности атаки / функциям безопасности» на два отдельных поля
-- Поля `recommendation` и `acceptability_status` добавлены в датакласс `VulnFinding`
-- Вспомогательные функции `_purl_type()` и `_find_prop()` в `pipeline.py`
-- Тесты `tests/test_new_columns.py` (77 cases): покрывают новые поля во всех сканерах, `_extract_dependencies()`, `Exporter._comp_rows()` / `_vuln_rows()` и Excel-экспорт
 
 ---
 
-## [2.1.0] — 2026-03-21
+## [2.1.0]
 
 ### Добавлено
 
@@ -131,7 +98,7 @@
 
 ---
 
-## [2.0.0] — 2025-12-01
+## [2.0.0]
 
 ### Добавлено
 
@@ -161,11 +128,10 @@
 
 ---
 
-## [1.x] — устаревшая версия
+## [1.x]
 
 Пайплайн на shell-скриптах. История в git log.
 
-[Unreleased]: https://github.com/geminishkv/sbom_genform/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/geminishkv/sbom_genform/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/geminishkv/sbom_genform/releases/tag/v2.1.0
 [2.0.0]: https://github.com/geminishkv/sbom_genform/releases/tag/v2.0.0

@@ -60,6 +60,12 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.secgensbom
+    # Безопасность: запрет эскалации привилегий и сброс всех Linux capabilities.
+    # Контейнер уже работает от непривилегированного uid 1001 (см. Dockerfile).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       clair:
         condition: service_healthy
@@ -99,6 +105,10 @@ services:
       context: .
       dockerfile: docker/Dockerfile.secgensbom
     command: ["scan", "/app/secgensbom_out/app-bom-dedup-signed.json", "-v"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       clair:
         condition: service_healthy

@@ -96,7 +96,11 @@ def merge_vulns_into_sbom(
                     "value": f.bdu_id,
                 }
             ]
-        if f.fixed_version:
+        # BUG-011: рекомендация сканера (PrimaryURL / Links / notes) попадает в SBOM;
+        # если её нет — синтезируем из версии-исправления.
+        if f.recommendation:
+            entry["recommendation"] = f.recommendation
+        elif f.fixed_version:
             entry["recommendation"] = f"Обновить до версии {f.fixed_version}"
         if f.acceptability_status:
             entry.setdefault("properties", []).append({

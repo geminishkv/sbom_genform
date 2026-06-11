@@ -105,7 +105,8 @@ def _parse(result_file: Path, scanner: str) -> List[VulnFinding]:
                     cve_id=vuln.get("VulnerabilityID", ""),
                     component_name=vuln.get("PkgName", ""),
                     component_version=vuln.get("InstalledVersion", ""),
-                    component_purl=vuln.get("PkgRef", ""),
+                    # Trivy кладёт PURL в PkgIdentifier.PURL (PkgRef обычно отсутствует) — BUG-006
+                    component_purl=(vuln.get("PkgIdentifier") or {}).get("PURL", "") or vuln.get("PkgRef", ""),
                     cvss_score=cvss_score,
                     severity=vuln.get("Severity", "UNKNOWN"),
                     description=vuln.get("Title") or vuln.get("Description", ""),
@@ -120,11 +121,21 @@ def _parse(result_file: Path, scanner: str) -> List[VulnFinding]:
     return findings
 
 
+def _safe_float(value: object) -> float:
+    """Безопасно привести значение к float; 0.0 при ошибке (BUG-009/017)."""
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _extract_cvss(cvss_map: dict) -> float:
     best = 0.0
     for src_data in cvss_map.values():
+        if not isinstance(src_data, dict):
+            continue
         for key in ("V3Score", "V2Score"):
-            score = src_data.get(key)
-            if score and float(score) > best:
-                best = float(score)
+            score = _safe_float(src_data.get(key))
+            if score > best:
+                best = score
     return best

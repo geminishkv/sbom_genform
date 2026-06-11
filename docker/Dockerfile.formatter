@@ -1,19 +1,41 @@
+# syntax=docker/dockerfile:1
 FROM python:3.13-slim
+
+ARG VERSION=latest
+
+LABEL org.opencontainers.image.title="sbom-pipeline-formatter" \
+      org.opencontainers.image.description="SBOM Formatter — CycloneDX JSON → Excel / Word / ODT" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/geminishkv/sbom_genform" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.authors="Elijah S Shmakov"
 
 WORKDIR /app
 
 COPY pyproject.toml LICENSE.md README.md ./
+COPY docs/ ./docs/
 COPY src/ ./src/
 
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -e . \
+ && pip install --no-cache-dir . \
  && chmod +x /usr/local/bin/secsbom /usr/local/bin/secsbom-pipeline
+
+# Непривилегированный пользователь — secsbom отказывается работать от root (is_admin guard)
+RUN groupadd --gid 1001 sbom \
+ && useradd --uid 1001 --gid sbom --create-home --shell /usr/sbin/nologin sbom \
+ && chown -R sbom:sbom /app
 
 ENV PYTHONUNBUFFERED=1 \
     OUTPUT_DIR=/app/secgensbom_out \
     REPORTS_DIR=/app/secgensbom_reports
 
-VOLUME ["/app/sbom", "/app/secgensbom_out", "/app/secgensbom_reports", "/app/reports"]
+VOLUME ["/app/secgensbom_out", "/app/secgensbom_reports"]
+
+# Healthcheck: CLI отвечает
+HEALTHCHECK --interval=5m --timeout=10s --start-period=10s --retries=3 \
+    CMD secsbom --version >/dev/null 2>&1 || exit 1
+
+USER sbom
 
 ENTRYPOINT ["secsbom-pipeline"]
 CMD ["format"]

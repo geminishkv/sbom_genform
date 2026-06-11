@@ -266,6 +266,8 @@ def gen_sbom(cfg: PipelineConfig) -> None:
     # 1. Генерация SBOM
     # ------------------------------------------------------------------
     app_bom = cfg.output_dir / APP_BOM_FILE
+    cdxgen_bom = cfg.output_dir / APP_BOM_CDXGEN_FILE
+    syft_bom = cfg.output_dir / APP_BOM_SYFT_FILE
 
     _has_code = cfg.project_dir is not None or cfg.git_url is not None
     _has_image = not cfg.skip_clair and bool(cfg.image_name)
@@ -286,12 +288,22 @@ def gen_sbom(cfg: PipelineConfig) -> None:
                 output_file=app_bom,
                 token=cfg.git_token,
                 branch=cfg.git_branch,
+                use_cdxgen=cfg.use_cdxgen,
+                use_syft=cfg.use_syft,
+                cdxgen_output=cdxgen_bom,
+                syft_output=syft_bom,
             )
         else:
             logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
             if cfg.project_dir is None:
                 raise RuntimeError("project_dir не задан — внутренняя ошибка маршрутизации источника")
-            generate.generate_from_dir(cfg.project_dir, app_bom)
+            generate.generate_from_dir(
+                cfg.project_dir, app_bom,
+                use_cdxgen=cfg.use_cdxgen,
+                use_syft=cfg.use_syft,
+                cdxgen_output=cdxgen_bom,
+                syft_output=syft_bom,
+            )
     else:
         # Режим только-образ: создать пустой SBOM-каркас для обогащения Clair
         logging.info("[pipeline] Исходный код не задан — создан пустой SBOM для образа")
@@ -382,12 +394,22 @@ def run(cfg: PipelineConfig) -> None:
                 output_file=app_bom,
                 token=cfg.git_token,
                 branch=cfg.git_branch,
+                use_cdxgen=cfg.use_cdxgen,
+                use_syft=cfg.use_syft,
+                cdxgen_output=cdxgen_bom,
+                syft_output=syft_bom,
             )
         else:
             logging.info(f"[pipeline] Источник: local → {cfg.project_dir}")
             if cfg.project_dir is None:
                 raise RuntimeError("project_dir не задан — внутренняя ошибка маршрутизации источника")
-            generate.generate_from_dir(cfg.project_dir, app_bom)
+            generate.generate_from_dir(
+                cfg.project_dir, app_bom,
+                use_cdxgen=cfg.use_cdxgen,
+                use_syft=cfg.use_syft,
+                cdxgen_output=cdxgen_bom,
+                syft_output=syft_bom,
+            )
     else:
         # Режим только-образ: создать пустой SBOM-каркас для обогащения Clair
         logging.info("[pipeline] Исходный код не задан — создан пустой SBOM для образа")
@@ -406,7 +428,6 @@ def run(cfg: PipelineConfig) -> None:
                 "Укажите переменную окружения IMAGE_NAME=<image>:<tag>."
             )
     if not cfg.skip_clair and cfg.image_name:
-        sanitized = cfg.image_name.replace(":", "_").replace("/", "_")
         _clair_report_file = clair.run_scan_report(
             image_name=cfg.image_name,
             output_dir=cfg.clair_dir,
@@ -589,8 +610,12 @@ def format_sboms(sbom_dir: Path, reports_dir: Path) -> None:
             logging.info(f"[format] Пропущен не-SBOM JSON: {sbom_path}")
             continue
         deps = _extract_dependencies(sbom_data, str(sbom_path))
+        vulns = _vuln_findings_from_sbom(sbom_data)  # BUG-013: показывать уязвимости из SBOM
         stem = sbom_path.stem
-        exporter = Exporter(deps, sbom_path=str(sbom_path))
+        exporter = Exporter(
+            deps, vulns=vulns, sbom_path=str(sbom_path),
+            include_bdu=any(f.bdu_id for f in vulns),
+        )
         exporter.exportToExcel(str(reports_dir / EXCEL_DIR / f"{stem}{EXCEL_EXTENSION}"))
         exporter.exportToDocx(str(reports_dir / DOCX_DIR / f"{stem}{DOCX_EXTENSION}"))
         exporter.exportToOdt(str(reports_dir / ODT_DIR / f"{stem}{ODT_EXTENSION}"))
@@ -609,6 +634,43 @@ def _is_cyclonedx_sbom(data: Any) -> bool:
         and data.get("bomFormat") == "CycloneDX"
         and isinstance(data.get("components", []), list)
     )
+
+
+def _vuln_findings_from_sbom(sbom: Dict[str, Any]) -> List[VulnFinding]:
+    """Восстановить List[VulnFinding] из vulnerabilities[] готового SBOM (для format)."""
+    comp_by_ref: Dict[str, Dict[str, Any]] = {}
+    for c in sbom.get("components", []):
+        ref = c.get("bom-ref") or f"{c.get('name', '')}@{c.get('version', '')}"
+        comp_by_ref[ref] = c
+
+    findings: List[VulnFinding] = []
+    for v in sbom.get("vulnerabilities", []):
+        ratings = v.get("ratings") or [{}]
+        r0 = ratings[0] if isinstance(ratings[0], dict) else {}
+        ref = (v.get("affects") or [{}])[0].get("ref", "")
+        comp = comp_by_ref.get(ref, {})
+        props = {
+            p.get("name", ""): p.get("value", "")
+            for p in (v.get("properties") or []) if isinstance(p, dict)
+        }
+        try:
+            score = float(r0.get("score") or 0.0)
+        except (TypeError, ValueError):
+            score = 0.0
+        findings.append(VulnFinding(
+            cve_id=v.get("id", ""),
+            component_name=comp.get("name", ""),
+            component_version=comp.get("version", ""),
+            component_purl=comp.get("purl", ""),
+            cvss_score=score,
+            severity=(r0.get("severity") or "UNKNOWN").upper(),
+            description=v.get("description", ""),
+            scanner=(v.get("source") or {}).get("name", "").lower(),
+            recommendation=v.get("recommendation", ""),
+            acceptability_status=props.get("acceptability_status", ""),
+            bdu_id=props.get("ru.fstec.bdu:id") or None,
+        ))
+    return findings
 
 
 def _export_reports(

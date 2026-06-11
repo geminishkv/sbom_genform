@@ -35,6 +35,18 @@ def scan(
     rep = (host_output_dir or output_dir).resolve()
     dat = (host_data_dir or data_dir).resolve()
 
+    # Показать, какая NVD-база используется: существующая (быстрое обновление)
+    # или её нет (полная загрузка с нуля — долго, особенно без NVD_API_KEY).
+    odc_db = dat / "odc.mv.db"
+    if odc_db.exists():
+        size_mb = odc_db.stat().st_size / (1024 * 1024)
+        logging.info("[depcheck] NVD-база: %s (%.0f МБ) — обновление существующей", odc_db, size_mb)
+    else:
+        logging.warning(
+            "[depcheck] NVD-база НЕ найдена в %s — будет скачана с нуля (несколько минут). "
+            "Запускайте из папки с .dependency-check-data или задайте NVD_API_KEY.", dat
+        )
+
     cmd = [
         "docker", "run", "--rm",
         "--platform", "linux/amd64",
@@ -51,7 +63,7 @@ def scan(
     if nvd_api_key:
         cmd += ["--nvdApiKey", nvd_api_key]
 
-    logging.info(f"[depcheck] Запуск dependency-check...")
+    logging.info("[depcheck] Запуск dependency-check...")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     # exit 1 = уязвимости найдены (штатный код)
@@ -101,7 +113,7 @@ def _parse(result_file: Path) -> List[VulnFinding]:
             raw_name: str = vuln.get("name", "")
             cve_id = _extract_cve_id(raw_name, refs)
             fixed_version = _extract_fixed_version(vuln)
-            acceptability_status = "Оценка не присвоена (advisory)" if vuln.get("unscored") == "true" else ""
+            acceptability_status = "Оценка не присвоена (advisory)" if str(vuln.get("unscored", "")).lower() == "true" else ""
             recommendation = (
                 vuln.get("notes", "")
                 or next((r.get("url", "") for r in refs if r.get("url")), "")
@@ -172,4 +184,7 @@ def _extract_cvss(vuln: dict) -> float:
     v3 = vuln.get("cvssv3") or {}
     v2 = vuln.get("cvssv2") or {}
     score = v3.get("baseScore") or v2.get("score") or 0.0
-    return float(score)
+    try:
+        return float(score)  # BUG-009: защита от строк/диапазонов CVSS
+    except (TypeError, ValueError):
+        return 0.0

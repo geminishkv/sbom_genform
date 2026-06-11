@@ -195,9 +195,14 @@ jobs:
           if [ ! -s RELEASE_BODY.md ]; then cp "RELEASE NOTES.md" RELEASE_BODY.md; fi
           echo "----- тело релиза -----"; cat RELEASE_BODY.md
 
+      - name: Package documentation
+        run: tar czf "sbom-pipeline-docs-${GITHUB_REF_NAME}.tar.gz" docs/ README.md "RELEASE NOTES.md"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: RELEASE_BODY.md
           generate_release_notes: true
-          files: dist/*
+          files: |
+            dist/*
+            sbom-pipeline-docs-*.tar.gz

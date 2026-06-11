@@ -2,12 +2,15 @@
 CLI точка входа: secsbom / secsbom-pipeline
 
 Команды:
-  run     — полный пайплайн (генерация → сканирование → отчёты)
-  format  — форматирование SBOM → xlsx / docx / odt
-  verify  — проверка SHA-256 подписи
-  info    — инспекция SBOM-файла
-  status  — проверка доступности внешних инструментов
-  diff    — сравнение двух SBOM
+  run      — полный пайплайн (генерация → сканирование → отчёты)
+  gen-sbom — генерация SBOM (без сканирования уязвимостей)
+  scan     — сканирование уязвимостей готового SBOM
+  format   — форматирование SBOM → xlsx / docx / odt
+  verify   — проверка SHA-256 контрольной суммы целостности
+  info     — инспекция SBOM-файла
+  status   — проверка доступности внешних инструментов
+  diff     — сравнение двух SBOM
+  cert     — обогащение полями GOST/ФСТЭК
 """
 
 from __future__ import annotations
@@ -153,7 +156,7 @@ def _print_help_table() -> None:
     cmd_t.add_row("[bold green]gen-sbom[/bold green]", "Генерация SBOM → дедупликация → подпись → отчёт компонентов")
     cmd_t.add_row("[bold green]scan[/bold green]",     "Сканирование уязвимостей готового SBOM → слияние → подпись → отчёты уязвимостей")
     cmd_t.add_row("[bold green]format[/bold green]",   "Форматирование готовых SBOM JSON → xlsx / docx / odt")
-    cmd_t.add_row("[bold green]verify[/bold green]", "Проверка SHA-256 подписи SBOM  [dim]<файл>[/dim]")
+    cmd_t.add_row("[bold green]verify[/bold green]", "Проверка SHA-256 контрольной суммы целостности  [dim]<файл>[/dim]")
     cmd_t.add_row("[bold green]info[/bold green]",   "Инспекция SBOM: компоненты, CVE по severity, подпись  [dim]<файл>[/dim]")
     cmd_t.add_row(
         "[bold green]status[/bold green]",
@@ -199,6 +202,8 @@ def _print_help_table() -> None:
     _opt_row(gt2, "--url",             "",   "TEXT", "URL репозитория GitHub/GitLab",             "GIT_URL",        "")
     _opt_row(gt2, "--token",           "",   "TEXT", "Токен доступа (ghp_... / glpat-...)",       "GIT_TOKEN",      "")
     _opt_row(gt2, "--branch",          "",   "TEXT", "Ветка репозитория",                         "GIT_BRANCH",     "HEAD")
+    _opt_row(gt2, "--cdxgen/--no-cdxgen", "", "",   "Генерировать SBOM через cdxgen",             "USE_CDXGEN",     "cdxgen")
+    _opt_row(gt2, "--syft/--no-syft", "",   "",     "Генерировать SBOM через syft",               "USE_SYFT",       "syft")
     _opt_row(gt2, "--output-dir",      "-o", "PATH", "Директория артефактов SBOM",                "OUTPUT_DIR",     "secgensbom_out")
     _opt_row(gt2, "--reports-dir",     "",   "PATH", "Директория отчётов",                        "REPORTS_DIR",    "secgensbom_reports")
     _opt_row(gt2, "--image",           "",   "TEXT", "Docker-образ для обогащения пакетами Clair","IMAGE_NAME",     "")
@@ -370,6 +375,16 @@ def cmd_gen_sbom(
         help="Ветка (по умолчанию HEAD)",
         envvar="GIT_BRANCH",
     ),
+    cdxgen: bool = typer.Option(
+        True, "--cdxgen/--no-cdxgen",
+        help="Генерировать SBOM через cdxgen",
+        envvar="USE_CDXGEN",
+    ),
+    syft: bool = typer.Option(
+        True, "--syft/--no-syft",
+        help="Генерировать SBOM через syft",
+        envvar="USE_SYFT",
+    ),
     output_dir: Path = typer.Option(
         Path("secgensbom_out"), "--output-dir", "-o",
         help="Директория артефактов",
@@ -411,6 +426,8 @@ def cmd_gen_sbom(
         cfg.git_token = token
     if branch:
         cfg.git_branch = branch
+    cfg.use_cdxgen = cdxgen
+    cfg.use_syft = syft
     cfg.output_dir = output_dir
     cfg.reports_dir = reports_dir
     cfg.image_name = image_name or cfg.image_name
@@ -994,7 +1011,7 @@ def cmd_cert(
         raise typer.Exit(code=1)
     
     if sbom.stem.endswith("(cert)"):
-        console.print(f"[bold red]✗ Файл уже обогащен ✗[/bold red]")
+        console.print("[bold red]✗ Файл уже обогащен ✗[/bold red]")
         raise typer.Exit(code=1)
     
 

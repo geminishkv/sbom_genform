@@ -84,7 +84,7 @@ def _cfg(tmp: Path, **kwargs) -> PipelineConfig:
 
 def _fake_gen_dir(sbom_data: Dict[str, Any]):
     """Stub for generate.generate_from_dir."""
-    def _fn(project_dir, output_file):
+    def _fn(project_dir, output_file, **kwargs):
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text(json.dumps(sbom_data), encoding="utf-8")
     return _fn

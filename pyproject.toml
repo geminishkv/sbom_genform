@@ -94,6 +94,7 @@ packages = ["src/sbom_pipeline"]
 [tool.hatch.build.targets.sdist]
 include = [
     "src/",
+    "docs/",
     "README.md",
     "LICENSE.md",
     "RELEASE NOTES.md",
