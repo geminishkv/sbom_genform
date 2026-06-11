@@ -437,14 +437,14 @@ docker compose up --build
 | Workflow         | Триггер              | Назначение                                              |
 | ---------------- | -------------------- | ------------------------------------------------------- |
 | `ci.yml`         | push / PR → main     | lint + mypy + pytest (3.11–3.13)                        |
-| `secgensbom.yml` | push → main, вручную | запуск пайплайна, сохранение SBOM и отчётов             |
+| `secgensbom.yml` | push → `securitycheck`, вручную | запуск пайплайна, сохранение SBOM и отчётов |
 | `publish.yml`    | тег `v*.*.*`         | GitHub Packages + PyPI + Docker Hub + GitHub Release    |
 
 **Публикация новой версии** — один тег запускает всё:
 
 ```bash
-git tag v2.1.0
-git push --tags
+git tag v2.2.0 -m "Release v2.2.0"
+git push origin v2.2.0
 ```
 
 ### Shared template
