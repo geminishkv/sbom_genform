@@ -184,9 +184,20 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Extract release notes for this version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "["ver"]")) { found=1; print; next } }
+            found { print }
+          ' "RELEASE NOTES.md" > RELEASE_BODY.md
+          # Фолбэк: если секции версии нет — берём весь файл целиком
+          if [ ! -s RELEASE_BODY.md ]; then cp "RELEASE NOTES.md" RELEASE_BODY.md; fi
+          echo "----- тело релиза -----"; cat RELEASE_BODY.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: "RELEASE NOTES.md"
+          body_path: RELEASE_BODY.md
           generate_release_notes: true
           files: dist/*
