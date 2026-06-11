@@ -1163,11 +1163,16 @@ def test_sig_file_matches_ondisk_file_hash(tmp_path):
 
 
 def test_gen_sbom_supports_generator_flags():
-    """БАГ #4: команда gen-sbom принимает --no-cdxgen / --no-syft (раньше падала «No such option»)."""
-    result = _CLI_RUNNER.invoke(cli.app, ["gen-sbom", "--help"])
-    assert result.exit_code == 0
-    assert "--no-syft" in result.stdout
-    assert "--no-cdxgen" in result.stdout
+    """БАГ #4: команда gen-sbom принимает --no-cdxgen / --no-syft (раньше падала «No such option»).
+
+    Проверяем приёмом флагов, а не поиском их в тексте --help: rich обрезает
+    длинные опции по ширине терминала (в узком CI-терминале `--no-syft` → `--no-…`),
+    из-за чего поиск точной строки в выводе хрупок и валит CI.
+    """
+    for flag in ("--no-syft", "--no-cdxgen", "--syft", "--cdxgen"):
+        result = _CLI_RUNNER.invoke(cli.app, ["gen-sbom", flag, "--help"])
+        assert result.exit_code == 0, f"{flag}: {result.output}"
+        assert "No such option" not in result.output, f"{flag} не распознан"
 
 
 def test_run_passes_generator_flags_to_generate(monkeypatch, tmp_path):
