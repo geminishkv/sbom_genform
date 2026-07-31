@@ -123,18 +123,18 @@ def _merge_component(target: Dict[str, Any], source: Dict[str, Any]) -> None:
 
     # --- externalReferences (union by url+type) ---
     if source.get("externalReferences"):
-        existing_refs: set[tuple[Any, Any]] = {
-            (r.get("url"), r.get("type"))
+        existing_refs: set[tuple[str, str]] = {
+            (str(r.get("url") or ""), str(r.get("type") or ""))
             for r in (target.get("externalReferences") or [])
             if isinstance(r, dict)
         }
         for ref in source["externalReferences"]:
             if not isinstance(ref, dict):
                 continue
-            key = (ref.get("url"), ref.get("type"))
-            if key not in existing_refs:
+            ref_key = (str(ref.get("url") or ""), str(ref.get("type") or ""))
+            if ref_key not in existing_refs:
                 target.setdefault("externalReferences", []).append(ref)
-                existing_refs.add(key)
+                existing_refs.add(ref_key)
 
     # --- nested components: append unique by identity ---
     if source.get("components"):
