@@ -248,6 +248,9 @@ class TestSourceRouting:
 
             mock_local_fn.assert_called_once()
             mock_git_fn.assert_not_called()
+            _, kwargs = mock_local_fn.call_args
+            assert "use_cdxgen" in kwargs
+            assert "use_syft" in kwargs
 
     def test_github_source_calls_generate_from_git(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -266,6 +269,26 @@ class TestSourceRouting:
 
             mock_git_fn.assert_called_once()
             mock_local_fn.assert_not_called()
+            _, kwargs = mock_git_fn.call_args
+            assert kwargs.get("use_cdxgen") is True
+            assert kwargs.get("use_syft") is True
+
+    def test_generator_flags_forwarded_to_generate_from_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = _cfg(Path(tmp))
+            cfg.use_cdxgen = False
+            cfg.use_syft = True
+
+            mock_local_fn = MagicMock(side_effect=_fake_gen_dir(_MINIMAL_SBOM))
+            with (
+                patch("sbom_pipeline.pipeline.generate.generate_from_dir", mock_local_fn),
+                patch("sbom_pipeline.pipeline._export_reports"),
+            ):
+                gen_sbom(cfg)
+
+            _, kwargs = mock_local_fn.call_args
+            assert kwargs["use_cdxgen"] is False
+            assert kwargs["use_syft"] is True
 
     def test_missing_git_url_raises(self):
         with tempfile.TemporaryDirectory() as tmp:

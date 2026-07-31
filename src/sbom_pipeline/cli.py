@@ -878,9 +878,14 @@ class ComponentType(str, Enum):
     device_driver = "device-driver"
     firmware = "firmware"
 
-def add_gost_cert_fields(sbom_path: Path, component_name: Optional[str] = None, component_version: Optional[str] = None,
-component_manufacturer: Optional[str] = None, component_type: ComponentType = ComponentType.application,
-output_path: Optional[Path] = None) -> Path:
+def add_gost_cert_fields(
+    sbom_path: Path,
+    component_name: Optional[str] = None,
+    component_version: Optional[str] = None,
+    component_manufacturer: Optional[str] = None,
+    component_type: ComponentType = ComponentType.application,
+    output_path: Optional[Path] = None,
+) -> Path:
    
     """Переработка структуры отчета согласно требованиям информационного сообщения ФСТЭК России
     от 13 января 2025 г. N 240/24/38."""

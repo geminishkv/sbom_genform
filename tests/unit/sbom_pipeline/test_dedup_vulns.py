@@ -177,21 +177,74 @@ class TestFallbackKey:
         )
         assert len(dedup_vulns([f1, f2])) == 2
 
-    def test_purl_and_nopurl_are_distinct_keys(self):
-        """Finding with purl and one without (same name@version) are different keys."""
+    def test_purl_and_nopurl_same_name_version_deduped(self):
+        """Clair (no purl) + Trivy (with purl) for same name@version → one finding."""
         f_with_purl = _f("CVE-2024-6666", "pkg:pypi/lib@1.0", name="lib", version="1.0")
         f_no_purl = VulnFinding(
             cve_id="CVE-2024-6666",
             component_name="lib",
             component_version="1.0",
             component_purl="",
-            cvss_score=5.0,
+            cvss_score=0.0,
             severity="HIGH",
             description="",
             scanner="clair",
+            fixed_version="1.0.1",
         )
-        # purl key ≠ name@version key → both survive
-        assert len(dedup_vulns([f_with_purl, f_no_purl])) == 2
+        result = dedup_vulns([f_with_purl, f_no_purl])
+        assert len(result) == 1
+        assert result[0].component_purl == "pkg:pypi/lib@1.0"
+        assert result[0].fixed_version == "1.0.1"
+        assert result[0].cvss_score == 5.0
+
+
+# ---------------------------------------------------------------------------
+# Field merge when higher CVSS wins
+# ---------------------------------------------------------------------------
+
+class TestFieldMerge:
+    def test_higher_score_keeps_fixed_version_from_loser(self):
+        findings = [
+            _f("CVE-2024-7777", "pkg:pypi/a@1.0", 9.0, "trivy"),
+            VulnFinding(
+                cve_id="CVE-2024-7777",
+                component_name="a",
+                component_version="1.0",
+                component_purl="pkg:pypi/a@1.0",
+                cvss_score=5.0,
+                severity="MEDIUM",
+                description="from-clair",
+                scanner="clair",
+                fixed_version="1.2.3",
+                recommendation="upgrade",
+                acceptability_status="acceptable",
+            ),
+        ]
+        # Put lower score first so higher replaces it
+        findings = [findings[1], findings[0]]
+        result = dedup_vulns(findings)
+        assert len(result) == 1
+        assert result[0].cvss_score == 9.0
+        assert result[0].scanner == "trivy"
+        assert result[0].fixed_version == "1.2.3"
+        assert result[0].recommendation == "upgrade"
+        assert result[0].acceptability_status == "acceptable"
+        # Winner already had a description — nonempty fields are not overwritten
+        assert result[0].description == "desc"
+
+
+# ---------------------------------------------------------------------------
+# CVSS cross-component fill
+# ---------------------------------------------------------------------------
+
+def test_zero_score_filled_from_other_component():
+    findings = [
+        _f("CVE-2024-8888", "pkg:pypi/a@1.0", 7.5, "trivy"),
+        _f("CVE-2024-8888", "pkg:pypi/b@2.0", 0.0, "clair"),
+    ]
+    result = dedup_vulns(findings)
+    by_purl = {r.component_purl: r for r in result}
+    assert by_purl["pkg:pypi/b@2.0"].cvss_score == 7.5
 
 
 # ---------------------------------------------------------------------------
