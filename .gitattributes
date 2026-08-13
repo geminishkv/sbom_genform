@@ -1,0 +1,8 @@
+# Test fixtures are sample input data, not source code. Without this they add
+# ~400 KB of HTML to the repository's language stats and make HTML look like
+# the primary language of the project (and of the owner's GitHub profile).
+tests/unit/sbom_pipeline/enrichters/*.html linguist-vendored=true
+
+# The PHP example project ships its own dependency tree. Linguist already skips
+# vendor/ by default; this makes the intent explicit and survives layout changes.
+examples/project_inject/vendor/** linguist-vendored=true
