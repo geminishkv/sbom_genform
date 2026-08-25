@@ -278,6 +278,9 @@ def gen_sbom(cfg: PipelineConfig) -> None:
             "и/или --image --clair (образ контейнера)."
         )
 
+    if _has_code and not cfg.use_cdxgen and not cfg.use_syft:
+        raise ValueError("Нужно включить хотя бы один генератор SBOM: cdxgen или syft.")
+
     if _has_code:
         if cfg.source in ("github", "gitlab"):
             if not cfg.git_url:
@@ -363,9 +366,6 @@ def run(cfg: PipelineConfig) -> None:
     """Запустить полный пайплайн."""
     cfg.ensure_output_dirs()
 
-    if not cfg.use_cdxgen and not cfg.use_syft:
-        raise ValueError("Нужно включить хотя бы один генератор SBOM: cdxgen или syft.")
-
     # ------------------------------------------------------------------
     # 1. Генерация SBOM
     # ------------------------------------------------------------------
@@ -381,6 +381,9 @@ def run(cfg: PipelineConfig) -> None:
             "Не задан ни один источник. Укажите --path/--url (исходный код) "
             "и/или --image --clair (образ контейнера)."
         )
+
+    if _has_code and not cfg.use_cdxgen and not cfg.use_syft:
+        raise ValueError("Нужно включить хотя бы один генератор SBOM: cdxgen или syft.")
 
     if _has_code:
         if cfg.source in ("github", "gitlab"):

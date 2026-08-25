@@ -164,6 +164,66 @@ def test_dedup_removes_duplicates():
         assert len(result["components"]) == 2
 
 
+def test_dedup_sbom_remaps_dependency_refs():
+    """Discarded bom-refs must be rewritten in dependencies."""
+    sbom = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "components": [
+            {
+                "type": "library",
+                "name": "requests",
+                "version": "2.31.0",
+                "purl": "pkg:pypi/requests@2.31.0",
+                "bom-ref": "r1",
+                "properties": [{"name": "src", "value": "cdxgen"}],
+            },
+            {
+                "type": "library",
+                "name": "requests",
+                "version": "2.31.0",
+                "purl": "pkg:pypi/requests@2.31.0",
+                "bom-ref": "r2",
+                "properties": [{"name": "src", "value": "syft"}],
+                "cpe": "cpe:2.3:a:python:requests:2.31.0:*:*:*:*:*:*:*",
+            },
+            {
+                "type": "library",
+                "name": "flask",
+                "version": "3.0.0",
+                "purl": "pkg:pypi/flask@3.0.0",
+                "bom-ref": "f1",
+            },
+        ],
+        "dependencies": [
+            {"ref": "app", "dependsOn": ["r1", "r2", "f1"]},
+            {"ref": "r2", "dependsOn": ["f1"]},
+        ],
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp)
+        inp = p / "bom.json"
+        out = p / "bom-dedup.json"
+        inp.write_text(json.dumps(sbom))
+
+        dedup_sbom(inp, out)
+        result = json.loads(out.read_text())
+
+        assert len(result["components"]) == 2
+        kept = next(c for c in result["components"] if c["name"] == "requests")
+        assert kept["bom-ref"] == "r1"
+        assert kept["cpe"].startswith("cpe:")
+        # Both distinct property values preserved
+        prop_values = {(pr["name"], pr["value"]) for pr in kept["properties"]}
+        assert ("src", "cdxgen") in prop_values
+        assert ("src", "syft") in prop_values
+
+        deps_by_ref = {d["ref"]: d for d in result["dependencies"]}
+        assert deps_by_ref["app"]["dependsOn"] == ["r1", "f1"]
+        assert "r2" not in deps_by_ref
+        assert deps_by_ref["r1"]["dependsOn"] == ["f1"]
+
+
 def test_generate_from_dir_requires_enabled_generator():
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp)
@@ -518,22 +578,34 @@ def test_dedup_vulns_fallback_key_no_purl():
     assert len(result) == 1
 
 
-def test_dedup_vulns_no_cross_match_purl_vs_nopurl():
-    """A finding with purl and one without for the same name@version are distinct keys."""
-    f1 = _vuln("CVE-2023-5555", "pkg:pypi/lib@1.0", 5.0)
+def test_dedup_vulns_cross_match_purl_vs_nopurl():
+    """Clair (no purl) and Trivy (purl) for the same name@version collapse to one."""
+    f1 = VulnFinding(
+        cve_id="CVE-2023-5555",
+        component_name="lib",
+        component_version="1.0",
+        component_purl="pkg:pypi/lib@1.0",
+        cvss_score=5.0,
+        severity="HIGH",
+        description="test",
+        scanner="trivy",
+    )
     f2 = VulnFinding(
         cve_id="CVE-2023-5555",
         component_name="lib",
         component_version="1.0",
         component_purl="",
-        cvss_score=5.0,
+        cvss_score=0.0,
         severity="HIGH",
         description="",
         scanner="clair",
+        fixed_version="1.0.1",
     )
-    # Different keys → both kept (purl vs name@version)
     result = dedup_vulns([f1, f2])
-    assert len(result) == 2
+    assert len(result) == 1
+    assert result[0].component_purl == "pkg:pypi/lib@1.0"
+    assert result[0].fixed_version == "1.0.1"
+    assert result[0].cvss_score == 5.0
 
 
 def test_format_sboms_skips_non_sbom_json():
@@ -1249,3 +1321,4 @@ def test_format_extracts_vulnerabilities_from_sbom(tmp_path):
     assert "Уязвимости" in wb.sheetnames
     rows = list(wb["Уязвимости"].iter_rows(values_only=True))
     assert any("CVE-2020-0001" in str(c) for r in rows for c in r), "уязвимость должна быть в Excel"
+
